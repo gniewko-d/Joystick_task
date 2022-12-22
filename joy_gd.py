@@ -9,12 +9,12 @@ import pandas as pd
 import numpy as np
 from termcolor import colored
 import math 
+import tkinter as tk
 import seaborn as sns; sns.set_theme()
+from tkinter import messagebox
+import matplotlib.pyplot as plt
 # VARIABLES
-
-
 df = None
-
 
 class Joystick_analyzer:
     def __init__(self):
@@ -43,30 +43,30 @@ class Joystick_analyzer:
            self.list_of_df.append(j)
            
            
-    def amplitude(self, event_markers = [0,1,2,3,4], merge = True):
+    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False):
+        global df
         amplitude_all =[]
         assert len(self.list_of_df) == len(self.list_of_files)
-        if merge:
-            df_amplitude = pd.DataFrame()
-            for k,i in enumerate(self.list_of_df):
-               trial_max = i["TrialCt"].max()
-               amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"].isin(event_markers)), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
-               df_amplitude[self.list_of_files[k]] = amplitude_
-               amplitude_all.append(df_amplitude)
-               #sns.displot()
-               
-        else:
-            df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
-            for l,i in enumerate(self.list_of_df):
-                trial_max = i["TrialCt"].max()
-                for k in event_markers:
-                    print(k)
-                    amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
-                    mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
-                    event_marker = [k for j in range(1, trial_max + 1)]
-                    dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
-                    df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
-            return df_amplitude.reset_index()
+        df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
+        for l,i in enumerate(self.list_of_df):
+            trial_max = i["TrialCt"].max()
+            for k in event_markers:
+                amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
+                mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
+                event_marker = [k for j in range(1, trial_max + 1)]
+                dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
+                df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                df_amplitude.reset_index(inplace = True, drop = True)
+        sns.set_style('ticks')
+        sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = "Mouse_ID", kde = kde, color = "green", palette = "tab10")
+        main = tk.Tk()
+        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs?',icon = 'warning')
+        if msg == "yes":
+            main.destroy()
+            save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+            save_file_v1 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + ".svg"
+            plt.savefig(save_file_v1)
+        return df_amplitude
     #def find_bugs(self):
         #for i in self.list_of_df:
             
@@ -77,10 +77,12 @@ class Joystick_analyzer:
                 print(colored(i,"red"), colored(j, "red"))
             elif self.group[1] in str(j):
                 print(colored(i,"green"), colored(j, "green"))
+            else:
+                print(colored(i,"blue"), colored(j, "blue"))
 
 
 
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
 object_joy.files_name()
-xd = object_joy.amplitude(merge = False)
+xd = object_joy.amplitude(kde=True)
