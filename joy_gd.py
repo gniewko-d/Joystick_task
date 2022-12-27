@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 16 17:18:42 2022
+Created on Fri Dec 23 17:34:20 2022
 
-@author: gniew
+@author: malgo
 """
+
 import easygui
 import pandas as pd
 import numpy as np
 from termcolor import colored
 import math 
 import tkinter as tk
-import seaborn as sns; sns.set_theme()
+import seaborn as sns;# sns.set_theme()
 from tkinter import messagebox
 import matplotlib.pyplot as plt
 # VARIABLES
 df = None
-
+from scipy.signal import savgol_filter
 class Joystick_analyzer:
     def __init__(self):
         self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks", "Type_move"]
@@ -66,11 +67,43 @@ class Joystick_analyzer:
             save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
             save_file_v1 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + ".svg"
             plt.savefig(save_file_v1)
+        else:
+            main.destroy()
         return df_amplitude
-    #def find_bugs(self):
-        #for i in self.list_of_df:
-            
     
+    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "ro"): 
+       assert len(self.list_of_df) == len(self.list_of_files)
+       
+       start, stop = pre_stim * 19, post_stim * 19
+       columns = np.linspace(start = -pre_stim, stop = post_stim, num = start + stop + 1)
+       x = [round(i,2) for i in columns]
+       columns_ = [str(i) for i in x]
+       x = np.array(x)
+
+       columns_.append("Animal_ID")
+       df_licks_group = pd.DataFrame(columns= columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
+       list_do_hist = []
+       for l,i in enumerate(self.list_of_df):
+            index_events = i.index[i['Event_Marker'] == 2].tolist()
+            trial_max = i["TrialCt"].max()
+            list_value = [i.iloc[j-start:j+stop + 1, 14].tolist() for j in index_events]
+            df_licks = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
+            prob_lick = df_licks.apply(lambda x: x.value_counts())
+            prob_lick = round(prob_lick / trial_max,2)
+            prob_lick = prob_lick.iloc[1, :].tolist()
+            prob_lick.append(self.list_of_files[l])
+            df_licks_group.iloc[l] = prob_lick
+       df_licks_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_licks_group.mean()
+       df_licks_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
+       y =  df_licks_group.iloc[:,0:-1].values.tolist()
+       y = np.array(y[0])
+       
+       yhat = savgol_filter(y, 9, 3)
+       #fig, axs = plt.subplots(2,1)
+       plt.plot(x,yhat, marker)
+       plt.show()
+       plt.plot(x,yhat)
+        
     def files_name(self):
         for i,j in enumerate(self.list_of_files):
             if self.group[0] in str(j):
@@ -84,5 +117,4 @@ class Joystick_analyzer:
 
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
-object_joy.files_name()
-xd = object_joy.amplitude(kde=True)
+object_joy.lick_histogram()
