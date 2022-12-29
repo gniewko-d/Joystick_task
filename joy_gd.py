@@ -16,6 +16,8 @@ from tkinter import messagebox
 import matplotlib.pyplot as plt
 # VARIABLES
 df = None
+df_result_amplitude = None
+df_result_lick = None
 from scipy.signal import savgol_filter
 class Joystick_analyzer:
     def __init__(self):
@@ -44,8 +46,8 @@ class Joystick_analyzer:
            self.list_of_df.append(j)
            
            
-    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False):
-        global df
+    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True):
+        global df, df_result_amplitude
         amplitude_all =[]
         assert len(self.list_of_df) == len(self.list_of_files)
         df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
@@ -59,19 +61,30 @@ class Joystick_analyzer:
                 df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
                 df_amplitude.reset_index(inplace = True, drop = True)
         sns.set_style('ticks')
-        sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = "Mouse_ID", kde = kde, color = "green", palette = "tab10")
+        sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10")
+        null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
+        if fill_nan:
+            for l,i in enumerate(self.list_of_files):
+                for k in event_markers:
+                    mask = (df_amplitude["Mouse_ID"] == i) & (df_amplitude["Event_Marker"] == k)
+                    mean = round(df_amplitude.loc[mask, "Amplitude_Pos"].mean(),2)
+                    df_amplitude.loc[mask, "Amplitude_Pos"] = df_amplitude.loc[mask, "Amplitude_Pos"].fillna(mean)
+                    
+            print(f"I filled {null_sum} data points")
         main = tk.Tk()
-        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs?',icon = 'warning')
+        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
         if msg == "yes":
             main.destroy()
             save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
-            save_file_v1 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + ".svg"
-            plt.savefig(save_file_v1)
+            save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + ".svg"
+            plt.savefig(save_file_v2)
+            df_amplitude.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_amplitude" + ".xlsx")
         else:
             main.destroy()
-        return df_amplitude
+        df_result_amplitude = df_amplitude
     
-    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "ro"): 
+    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True): 
+       global df_result_lick
        assert len(self.list_of_df) == len(self.list_of_files)
        
        start, stop = pre_stim * 19, post_stim * 19
@@ -95,15 +108,32 @@ class Joystick_analyzer:
             df_licks_group.iloc[l] = prob_lick
        df_licks_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_licks_group.mean()
        df_licks_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
-       y =  df_licks_group.iloc[:,0:-1].values.tolist()
-       y = np.array(y[0])
-       
-       yhat = savgol_filter(y, 9, 3)
-       #fig, axs = plt.subplots(2,1)
-       plt.plot(x,yhat, marker)
-       plt.show()
-       plt.plot(x,yhat)
-        
+       df_licks_group.set_index("Animal_ID", inplace = True)
+       df_result_lick = df_licks_group
+       main = tk.Tk()
+       msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+       if msg == "yes":
+           main.destroy()
+           save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+       if group == "all":
+           for index, row in df_licks_group.iterrows():
+               plt.plot(x,np.array(row), marker, label = index)
+               plt.title("Original")
+               plt.legend()
+               if msg == "yes":
+                   save_file_v2 = save_file_v1 + "//" + index + "_" + "orginal" + ".svg"
+                   plt.savefig(save_file_v2)
+                   plt.show()
+               if smooth:
+                   yhat = savgol_filter(np.array(row), 9, 3)
+                   plt.plot(x,yhat, marker, label = index)
+                   plt.title("Smoothed")
+                   plt.legend()
+                   if msg == "yes":
+                       save_file_v2 = save_file_v1 + "//" + index + "_" + "smoothed" + ".svg"
+                       plt.savefig(save_file_v2)
+                       plt.show()
+           df_licks_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_lick" + ".xlsx")
     def files_name(self):
         for i,j in enumerate(self.list_of_files):
             if self.group[0] in str(j):
@@ -118,3 +148,4 @@ class Joystick_analyzer:
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
 object_joy.lick_histogram()
+#object_joy.amplitude(fill_nan = True)
