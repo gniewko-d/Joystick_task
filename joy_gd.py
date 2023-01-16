@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Dec 23 17:34:20 2022
+Created on Sun Jan 15 16:41:17 2023
 
 @author: malgo
 """
@@ -10,15 +10,19 @@ import pandas as pd
 import numpy as np
 from termcolor import colored
 import math 
+import progressbar
 import tkinter as tk
 import seaborn as sns;# sns.set_theme()
 from tkinter import messagebox
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
+
 # VARIABLES
 df = None
 df_result_amplitude = None
 df_result_lick = None
-from scipy.signal import savgol_filter
+xd = None 
+xd1 = None
 class Joystick_analyzer:
     def __init__(self):
         self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks", "Type_move"]
@@ -83,7 +87,7 @@ class Joystick_analyzer:
             main.destroy()
         df_result_amplitude = df_amplitude
     
-    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True): 
+    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3): 
        global df_result_lick
        assert len(self.list_of_df) == len(self.list_of_files)
        
@@ -102,6 +106,7 @@ class Joystick_analyzer:
             list_value = [i.iloc[j-start:j+stop + 1, 14].tolist() for j in index_events]
             df_licks = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
             prob_lick = df_licks.apply(lambda x: x.value_counts())
+            prob_lick.fillna(0, inplace = True)
             prob_lick = round(prob_lick / trial_max,2)
             prob_lick = prob_lick.iloc[1, :].tolist()
             prob_lick.append(self.list_of_files[l])
@@ -115,25 +120,73 @@ class Joystick_analyzer:
        if msg == "yes":
            main.destroy()
            save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+       else:
+           main.destroy()
        if group == "all":
+           bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
+           n = 0
            for index, row in df_licks_group.iterrows():
+               n += 1
+               bar.update(n)
                plt.plot(x,np.array(row), marker, label = index)
                plt.title("Original")
+               plt.ylabel("Probability density")
+               plt.xlabel("Time [s]")
+               plt.annotate("Max prob", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
+               plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, row.max()/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.legend()
+               
                if msg == "yes":
                    save_file_v2 = save_file_v1 + "//" + index + "_" + "orginal" + ".svg"
                    plt.savefig(save_file_v2)
                    plt.show()
+               else:
+                   plt.show()
                if smooth:
-                   yhat = savgol_filter(np.array(row), 9, 3)
+                   yhat = savgol_filter(np.array(row), window_length, polyorder)
                    plt.plot(x,yhat, marker, label = index)
+                   plt.annotate("Max prob", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
+                   plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
                    plt.title("Smoothed")
+                   plt.ylabel("Probability density")
+                   plt.xlabel("Time [s]")
                    plt.legend()
                    if msg == "yes":
                        save_file_v2 = save_file_v1 + "//" + index + "_" + "smoothed" + ".svg"
                        plt.savefig(save_file_v2)
                        plt.show()
-           df_licks_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_lick" + ".xlsx")
+                   else:
+                       plt.show()
+       elif group == "mean":
+           plt.plot(x,df_licks_group.iloc[-1], marker, label = "Mean")
+           plt.title("Original")
+           plt.ylabel("Probability density")
+           plt.xlabel("Time [s]")
+           plt.legend()
+           if msg == "yes":
+                save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "orginal" + ".svg"
+                plt.savefig(save_file_v2)
+                plt.show()
+           else:
+                plt.show()
+           if smooth:
+               yhat = savgol_filter(np.array(df_licks_group.iloc[-1]), window_length, polyorder)
+               plt.annotate("Max prob", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
+               plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
+               plt.plot(x,yhat, marker, label = "Mean")
+               plt.title("Smoothed")
+               plt.ylabel("Probability density")
+               plt.xlabel("Time [s]")
+               plt.legend()
+           if msg == "yes":
+               save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "smoothed" + ".svg"
+               plt.savefig(save_file_v2)
+               plt.show()
+           else:
+               plt.show()
+        
+       if msg == "yes":
+            df_licks_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_lick" + ".xlsx")
     def files_name(self):
         for i,j in enumerate(self.list_of_files):
             if self.group[0] in str(j):
@@ -142,10 +195,24 @@ class Joystick_analyzer:
                 print(colored(i,"green"), colored(j, "green"))
             else:
                 print(colored(i,"blue"), colored(j, "blue"))
-
-
-
+    def find_bugs(self, alfa = 0.10):
+        global xd, xd1
+        for l,i in enumerate(self.list_of_df):
+            base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
+            base_y_upper = i.loc[0, "Base_JoyPos_Y"] + i.loc[0, "Base_JoyPos_Y"] * alfa
+            
+            base_x_lower = i.loc[0, "Base_JoyPos_X"] - i.loc[0, "Base_JoyPos_X"] * alfa
+            base_y_lower = i.loc[0, "Base_JoyPos_Y"] - i.loc[0, "Base_JoyPos_Y"] * alfa
+            trial_max = i["TrialCt"].max()
+            ans_x = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_X"]).pop() for ii in range(1,trial_max +1)]
+            ans_y = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_Y"]).pop() for ii in range(1,trial_max +1)]
+            x_bool = [True if base_x_lower < jj < base_x_upper else False for jj in ans_x]
+            y_bool = [True if base_y_lower < kk < base_y_upper else False for kk in ans_y]
+            print(base_x_upper, base_x_lower)
+            xd = x_bool
+            xd1 = ans_x
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
-object_joy.lick_histogram()
-#object_joy.amplitude(fill_nan = True)
+object_joy.find_bugs()
+#object_joy.lick_histogram()
+#object_joy.amplitude(event_markers = [0,1,3,4,2], hue = "Event_Marker", fill_nan = True, group = None)
