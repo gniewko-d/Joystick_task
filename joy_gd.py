@@ -23,6 +23,7 @@ df_result_amplitude = None
 df_result_lick = None
 xd = None 
 xd1 = None
+switcher = False
 class Joystick_analyzer:
     def __init__(self):
         self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks", "Type_move"]
@@ -51,23 +52,32 @@ class Joystick_analyzer:
            
            
     def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True):
-        global df, df_result_amplitude
+        global df, df_result_amplitude, switcher
         amplitude_all =[]
         assert len(self.list_of_df) == len(self.list_of_files)
         df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
         for l,i in enumerate(self.list_of_df):
-            trial_max = i["TrialCt"].max()
-            for k in event_markers:
-                amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
-                mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
-                event_marker = [k for j in range(1, trial_max + 1)]
-                dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
-                df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
-                df_amplitude.reset_index(inplace = True, drop = True)
-        sns.set_style('ticks')
-        sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10")
-        null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
+            if switcher:
+                self.good_index
+                for k in event_markers:
+                    amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in self.good_index]
+                    mouse_id = [self.list_of_files[l] for m in range(1, len(self.good_index) +1)]
+                    event_marker = [k for j in range(1, len(self.good_index) +1)]
+                    dict_to_add = {"TrialCt": self.good_index, "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
+                    df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                    df_amplitude.reset_index(inplace = True, drop = True)
+            
+            else:
+                trial_max = i["TrialCt"].max()
+                for k in event_markers:
+                    amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
+                    mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
+                    event_marker = [k for j in range(1, trial_max + 1)]
+                    dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
+                    df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                    df_amplitude.reset_index(inplace = True, drop = True)
         if fill_nan:
+            null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
             for l,i in enumerate(self.list_of_files):
                 for k in event_markers:
                     mask = (df_amplitude["Mouse_ID"] == i) & (df_amplitude["Event_Marker"] == k)
@@ -75,6 +85,9 @@ class Joystick_analyzer:
                     df_amplitude.loc[mask, "Amplitude_Pos"] = df_amplitude.loc[mask, "Amplitude_Pos"].fillna(mean)
                     
             print(f"I filled {null_sum} data points")
+        sns.set_style('ticks')
+        sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10")
+        null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
         main = tk.Tk()
         msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
         if msg == "yes":
@@ -88,7 +101,7 @@ class Joystick_analyzer:
         df_result_amplitude = df_amplitude
     
     def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3): 
-       global df_result_lick
+       global df_result_lick, switcher, xd
        assert len(self.list_of_df) == len(self.list_of_files)
        
        start, stop = pre_stim * 19, post_stim * 19
@@ -102,7 +115,11 @@ class Joystick_analyzer:
        list_do_hist = []
        for l,i in enumerate(self.list_of_df):
             index_events = i.index[i['Event_Marker'] == 2].tolist()
-            trial_max = i["TrialCt"].max()
+            if switcher:
+                trial_max = self.new_max
+                
+            else:
+                trial_max = i["TrialCt"].max()
             list_value = [i.iloc[j-start:j+stop + 1, 14].tolist() for j in index_events]
             df_licks = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
             prob_lick = df_licks.apply(lambda x: x.value_counts())
@@ -111,6 +128,7 @@ class Joystick_analyzer:
             prob_lick = prob_lick.iloc[1, :].tolist()
             prob_lick.append(self.list_of_files[l])
             df_licks_group.iloc[l] = prob_lick
+            xd = i
        df_licks_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_licks_group.mean()
        df_licks_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
        df_licks_group.set_index("Animal_ID", inplace = True)
@@ -133,7 +151,7 @@ class Joystick_analyzer:
                plt.ylabel("Probability density")
                plt.xlabel("Time [s]")
                plt.annotate("Max prob", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
-               plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, row.max()/2),arrowprops = dict(facecolor='green', shrink=0.1))
+               plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, (row.max() + row.min())/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.legend()
                
                if msg == "yes":
@@ -146,7 +164,7 @@ class Joystick_analyzer:
                    yhat = savgol_filter(np.array(row), window_length, polyorder)
                    plt.plot(x,yhat, marker, label = index)
                    plt.annotate("Max prob", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
-                   plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
+                   plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
                    plt.title("Smoothed")
                    plt.ylabel("Probability density")
                    plt.xlabel("Time [s]")
@@ -196,11 +214,14 @@ class Joystick_analyzer:
             else:
                 print(colored(i,"blue"), colored(j, "blue"))
     def find_bugs(self, alfa = 0.10):
-        global xd, xd1
+        global xd, xd1, switcher
+        self.list_of_df_v1 = []
+        print("Test started\n")
+        main = tk.Tk()
+        msg2 = tk.messagebox.askquestion ('Delete window','Do you want to delete bugged data?',icon = 'warning')
         for l,i in enumerate(self.list_of_df):
             base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
             base_y_upper = i.loc[0, "Base_JoyPos_Y"] + i.loc[0, "Base_JoyPos_Y"] * alfa
-            
             base_x_lower = i.loc[0, "Base_JoyPos_X"] - i.loc[0, "Base_JoyPos_X"] * alfa
             base_y_lower = i.loc[0, "Base_JoyPos_Y"] - i.loc[0, "Base_JoyPos_Y"] * alfa
             trial_max = i["TrialCt"].max()
@@ -208,11 +229,37 @@ class Joystick_analyzer:
             ans_y = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_Y"]).pop() for ii in range(1,trial_max +1)]
             x_bool = [True if base_x_lower < jj < base_x_upper else False for jj in ans_x]
             y_bool = [True if base_y_lower < kk < base_y_upper else False for kk in ans_y]
-            print(base_x_upper, base_x_lower)
-            xd = x_bool
-            xd1 = ans_x
+            x_y_bool = ["ok" if x == True and y == True else "not ok" if x == True or y == True else "very bad" for x, y in zip(x_bool, y_bool)]
+            df_result = pd.DataFrame({"x_bool": x_bool, "y_bool": y_bool, "x_y_bool": x_y_bool}, index = range(1,trial_max +1))
+            print("Mice ID: ", self.list_of_files[l],"\n", df_result["x_y_bool"].value_counts(), "\n" ,round(df_result["x_y_bool"].value_counts(normalize=True),2))
+            print(" ")
+            trial_max = i["TrialCt"].max()
+            if msg2 == "yes":
+                main.destroy()
+                buggs_index = df_result.index[(df_result['x_y_bool'] == "not ok") | (df_result['x_y_bool'] == "very bad")].tolist()
+                self.good_index = df_result.index[(df_result['x_y_bool'] == "ok")].tolist()
+                self.new_max =  trial_max - len(buggs_index)
+                i.drop(i[i["TrialCt"].isin(buggs_index)].index, inplace = True)
+                self.list_of_df_v1.append(i)
+                switcher = True
+            else:
+                main.destroy()
+        print("Test completed")
+        if msg2 == "yes":
+            self.list_of_df = self.list_of_df_v1
+        xd = df_result
+    
+    def help_me(self):
+        print("amplitude /n function parameters:/n event_markers - which events will be included in graph [value: 0,1,2,3,4] /n hue - events markers will be presented separately or jointly [value: Event_Marker, None]/n kde - data will be presented as an output of kernel density estimation [value: True, False]/n group - graphs will be created for each mice separately or together /n fill_nan - fill missing data")
+        #main = tk.Tk()
+        #msg2 = tk.messagebox.askquestion ('Delete window','Do you want to delete bugged data?',icon = 'warning')
+
+
+
+
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
-object_joy.find_bugs()
+object_joy.find_bugs(alfa = 0.05)
 #object_joy.lick_histogram()
-#object_joy.amplitude(event_markers = [0,1,3,4,2], hue = "Event_Marker", fill_nan = True, group = None)
+object_joy.amplitude(event_markers = [0], hue = "Event_Marker", fill_nan = True, group = None)
+#object_joy.help_me()
