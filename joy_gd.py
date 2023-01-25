@@ -16,11 +16,14 @@ import seaborn as sns;# sns.set_theme()
 from tkinter import messagebox
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
+from sklearn.preprocessing import MinMaxScaler
+
 
 # VARIABLES
 df = None
 df_result_amplitude = None
 df_result_lick = None
+df_result_type_move = None
 xd = None 
 xd1 = None
 switcher = False
@@ -46,8 +49,13 @@ class Joystick_analyzer:
            max_row = [round(i) for i in max_row]
            answer = max_row.index(1801 + max_row[0])
            j = j.drop(j.index[answer-4:])
+           trial_max = j["TrialCt"].max()
+           #bugged_index = [j.loc[j["Event_Marker"] == l, "Event_Marker"].lt(0).idxmax() for l in range(1, trial_max + 1)]
+           bugged_index = [j.loc[j["TrialCt"] == l, "Event_Marker"].lt(0).idxmax() for l in range(1, trial_max + 1)]
+           j.iloc[bugged_index, 5] = 0
            df.columns = self.column_name
            df = df.drop(df.index[answer-4:])
+           df.iloc[bugged_index, 5] = 0
            self.list_of_df.append(j)
            
            
@@ -95,8 +103,10 @@ class Joystick_analyzer:
             save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
             save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + ".svg"
             plt.savefig(save_file_v2)
+            plt.show()
             df_amplitude.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_amplitude" + ".xlsx")
         else:
+            plt.show()
             main.destroy()
         df_result_amplitude = df_amplitude
     
@@ -219,6 +229,7 @@ class Joystick_analyzer:
         print("Test started\n")
         main = tk.Tk()
         msg2 = tk.messagebox.askquestion ('Delete window','Do you want to delete bugged data?',icon = 'warning')
+        main.destroy()
         for l,i in enumerate(self.list_of_df):
             base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
             base_y_upper = i.loc[0, "Base_JoyPos_Y"] + i.loc[0, "Base_JoyPos_Y"] * alfa
@@ -235,31 +246,130 @@ class Joystick_analyzer:
             print(" ")
             trial_max = i["TrialCt"].max()
             if msg2 == "yes":
-                main.destroy()
                 buggs_index = df_result.index[(df_result['x_y_bool'] == "not ok") | (df_result['x_y_bool'] == "very bad")].tolist()
                 self.good_index = df_result.index[(df_result['x_y_bool'] == "ok")].tolist()
                 self.new_max =  trial_max - len(buggs_index)
                 i.drop(i[i["TrialCt"].isin(buggs_index)].index, inplace = True)
                 self.list_of_df_v1.append(i)
                 switcher = True
-            else:
-                main.destroy()
         print("Test completed")
         if msg2 == "yes":
             self.list_of_df = self.list_of_df_v1
-        xd = df_result
-    
+    def move_type(self, hue = None, event_markers = [0,1,2,3,4], group = "all"):
+        global df_result_type_move
+        df_type_move = pd.DataFrame(columns= ["Pull", "Push", "None", "Id"])
+        if group == "all": 
+            main = tk.Tk()
+            msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+            main.destroy()
+            if msg == "yes":
+                save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+            for l,i in enumerate(self.list_of_df):
+                i = i.loc[i["Event_Marker"].isin(event_markers), :]
+                sns.countplot(x = 'Type_move', data=i, hue = hue, palette = "tab10").set(title= self.list_of_files[l])
+                if hue != None:
+                    for iii in  event_markers:
+                        values = i.loc[i["Event_Marker"] == iii, "Type_move"].value_counts().tolist()
+                        values.append(iii)
+                        keys = i.loc[i["Event_Marker"] == iii, "Type_move"].value_counts().index.tolist()
+                        keys.append("Id")
+                        dict_to_add = {keys[ii]: values[ii] for ii in range(len(values))}
+                        df_type_move = df_type_move.append(dict_to_add, ignore_index= True)
+                    if msg == "yes":
+                        save_file_v2 = save_file_v1 + "//" + self.list_of_files[l] + ".svg"
+                        plt.savefig(save_file_v2)
+                        plt.show()
+                    else:
+                        plt.show()
+                else:
+                    values = i.loc[:, "Type_move"].value_counts().tolist()
+                    keys = i.loc[:, "Type_move"].value_counts().index.tolist()
+                    dict_to_add = {keys[ii]: values[ii] for ii in range(len(values))}
+                    df_type_move = df_type_move.append(dict_to_add, ignore_index=True)
+                    if msg == "yes":
+                        save_file_v2 = save_file_v1 + "//" + self.list_of_files[l] + ".svg"
+                        plt.savefig(save_file_v2)
+                        plt.show()
+                    else:
+                        plt.show()
+            if hue != None:
+                columns_v1 = []
+                columns_v1.append(event_markers)
+                columns_v1.append("Type_move")
+                df_for_plot = pd.DataFrame(columns= columns_v1)
+                
+                for i in event_markers:
+                    #df_type_move.loc[len(self.list_of_df), :] = df_type_move.loc[].mean()
+                    #df_result_type_move = df_type_move
+                    df_type_move.loc[len(df_type_move), :] = df_type_move.loc[df_type_move["Id"] == i, :].mean()
+                    #df_for_plot[str(i)] = df_type_move.loc[df_type_move["Id"] == i, :].mean().tolist()
+                    df_type_move.iloc[-1, 3] = "mean_" + str(i)
+                    columns = df_type_move.columns.tolist()
+                    columns.remove("Id")
+                    
+                df_result_type_move = df_type_move
+            else:
+                df_type_move.loc[len(self.list_of_df), :] = df_type_move.mean()
+                df_result_type_move = df_type_move
+                columns = df_result_type_move.columns.tolist()
+                height =  [round(r) for r in df_result_type_move.iloc[-1].tolist()]
+                plt.bar(columns, height)
+                plt.title("Mean")
+                if msg == "yes":
+                    save_file_v2 = save_file_v1 + "//" + "Mean" + ".svg"
+                    plt.savefig(save_file_v2)
+                    plt.show()
+                else:
+                    plt.show()
+        elif group == "mean":
+            main = tk.Tk()
+            msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+            main.destroy()
+            if msg == "yes":
+                save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+            for l,i in enumerate(self.list_of_df):
+                i = i.loc[i["Event_Marker"].isin(event_markers), :]
+                values = i.loc[:, "Type_move"].value_counts().tolist()
+                keys = i.loc[:, "Type_move"].value_counts().index.tolist()
+                dict_to_add = {keys[ii]: values[ii] for ii in range(len(values))}
+                df_type_move = df_type_move.append(dict_to_add, ignore_index=True)
+            df_type_move.loc[len(self.list_of_df), :] = df_type_move.mean()
+            df_result_type_move = df_type_move
+            columns = df_result_type_move.columns.tolist()
+            height =  [round(r) for r in df_result_type_move.iloc[-1].tolist()]
+            plt.bar(columns, height)
+            plt.title("Mean")
+            if msg == "yes":
+                save_file_v2 = save_file_v1 + "//" + "Mean" + ".svg"
+                plt.savefig(save_file_v2)
+                plt.show()
+            else:
+                plt.show()
     def help_me(self):
-        print("amplitude /n function parameters:/n event_markers - which events will be included in graph [value: 0,1,2,3,4] /n hue - events markers will be presented separately or jointly [value: Event_Marker, None]/n kde - data will be presented as an output of kernel density estimation [value: True, False]/n group - graphs will be created for each mice separately or together /n fill_nan - fill missing data")
-        #main = tk.Tk()
-        #msg2 = tk.messagebox.askquestion ('Delete window','Do you want to delete bugged data?',icon = 'warning')
-
-
-
-
+        print("amplitude \n function parameters:\n event_markers - which events will be included in graph [value: 0,1,2,3,4 (int)] \n hue - events markers will be presented separately or jointly [value: Event_Marker (string), None]\n kde - data will be presented as an output of kernel density estimation [value: True (bool), False (bool)]\n group - graphs will be created for each mice separately or together [value: Mouse_ID (string), None]\n fill_nan - fill missing data [value: True (bool), False (bool)]")
+        print("")
+        print("lick_histogram \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data")
+        print("")
+        
+    def trajectory(self):
+        global xd, xd1 
+        noramlizer = MinMaxScaler()
+        for l,i in enumerate(self.list_of_df):
+            trial_list = sorted(set(i.loc[:, "TrialCt"].tolist()))
+            xd = trial_list
+            movment_list_x = [i.loc[i["TrialCt"] == g , "JoyPos_X"].tolist() for g in trial_list]
+            movment_list_x_norm = [ noramlizer.fit_transform(np.array(gg).reshape(-1, 1)) for gg in movment_list_x]
+            movment_list_y = [i.loc[i["TrialCt"] == g , "JoyPos_Y"].tolist() for g in trial_list]
+            movment_list_y_norm = [ noramlizer.fit_transform(np.array(gg).reshape(-1, 1)) for gg in movment_list_y]
+            xd1 = movment_list_x_norm
+            print(movment_list_x[0], movment_list_y[0])
+            plt.plot( movment_list_y[20], movment_list_x[20])
+            plt.show()
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
-object_joy.find_bugs(alfa = 0.05)
+#object_joy.find_bugs(alfa = 0.05)
+#object_joy.trajectory()
 #object_joy.lick_histogram()
-object_joy.amplitude(event_markers = [0], hue = "Event_Marker", fill_nan = True, group = None)
+#object_joy.amplitude(event_markers = [0,1], hue = "Event_Marker", fill_nan = True, group = None)
+object_joy.move_type(event_markers = [1,4,0], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
