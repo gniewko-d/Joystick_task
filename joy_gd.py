@@ -256,7 +256,7 @@ class Joystick_analyzer:
         if msg2 == "yes":
             self.list_of_df = self.list_of_df_v1
     def move_type(self, hue = None, event_markers = [0,1,2,3,4], group = "all"):
-        global df_result_type_move
+        global df_result_type_move, xd
         df_type_move = pd.DataFrame(columns= ["Pull", "Push", "None", "Id"])
         if group == "all": 
             main = tk.Tk()
@@ -293,21 +293,33 @@ class Joystick_analyzer:
                     else:
                         plt.show()
             if hue != None:
-                columns_v1 = []
-                columns_v1.append(event_markers)
+                columns_v1 = [o for o in event_markers]
                 columns_v1.append("Type_move")
-                df_for_plot = pd.DataFrame(columns= columns_v1)
-                
+                templet = np.zeros((3, len(columns_v1)))
+                df_for_plot = pd.DataFrame(templet, columns= columns_v1)
                 for i in event_markers:
-                    #df_type_move.loc[len(self.list_of_df), :] = df_type_move.loc[].mean()
                     #df_result_type_move = df_type_move
                     df_type_move.loc[len(df_type_move), :] = df_type_move.loc[df_type_move["Id"] == i, :].mean()
                     #df_for_plot[str(i)] = df_type_move.loc[df_type_move["Id"] == i, :].mean().tolist()
                     df_type_move.iloc[-1, 3] = "mean_" + str(i)
+                    
                     columns = df_type_move.columns.tolist()
                     columns.remove("Id")
-                    
-                df_result_type_move = df_type_move
+                    #df_for_plot[i] = df_type_move.loc[df_type_move["Id"] == "mean_" + str(i), "Pull": "None"].values
+                    ans =  df_type_move.loc[df_type_move["Id"] == "mean_" + str(i), "Pull": "None"].values.tolist()
+                    df_for_plot[i] = ans[0]
+                df_for_plot["Type_move"] = ["Pull", "Push", "None"]
+                df_result_type_move = df_for_plot
+                xd = df_type_move
+                ax = df_for_plot.plot(x="Type_move", y=event_markers, kind="bar", rot=0, title = "Mean").get_figure()
+                #ax.savefig('test.pdf')
+                if msg == "yes":
+                    save_file_v3 = save_file_v1 + "//" + "Mean" + ".svg"
+                    ax.savefig(save_file_v3)
+                    #plt.savefig(save_file_v2)
+                    #plt.show()
+                #else:
+                    #plt.show()
             else:
                 df_type_move.loc[len(self.list_of_df), :] = df_type_move.mean()
                 df_result_type_move = df_type_move
@@ -356,20 +368,53 @@ class Joystick_analyzer:
         noramlizer = MinMaxScaler()
         for l,i in enumerate(self.list_of_df):
             trial_list = sorted(set(i.loc[:, "TrialCt"].tolist()))
-            xd = trial_list
+            
+            start_index = [i.loc[i["TrialCt"] == hh].first_valid_index() for hh in trial_list if i.loc[(i["TrialCt"] == hh) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
+            
+            movment_end = [i.loc[(i["TrialCt"] == ii) & (i["Event_Marker"] == 1), "Amplitude_Pos"].idxmax() for ii in trial_list if i.loc[(i["TrialCt"] == ii) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
+            
+            cropp_movment = [index for range_index in zip(movment_end, start_index) for index in range(range_index[0], range_index[1]-1,-1)]
+
+            #xd1 = movment_end
             movment_list_x = [i.loc[i["TrialCt"] == g , "JoyPos_X"].tolist() for g in trial_list]
             movment_list_x_norm = [ noramlizer.fit_transform(np.array(gg).reshape(-1, 1)) for gg in movment_list_x]
             movment_list_y = [i.loc[i["TrialCt"] == g , "JoyPos_Y"].tolist() for g in trial_list]
             movment_list_y_norm = [ noramlizer.fit_transform(np.array(gg).reshape(-1, 1)) for gg in movment_list_y]
-            xd1 = movment_list_x_norm
-            print(movment_list_x[0], movment_list_y[0])
-            plt.plot( movment_list_y[20], movment_list_x[20])
+            
+            movment_list_x_start_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 3].tolist() for range_index_1 in zip(start_index, movment_end)]
+            movment_list_y_start_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 4].tolist() for range_index_1 in zip(start_index, movment_end)]
+            
+            list_final = []
+            list_supporter = []
+            
+            for range_index in zip(movment_end, start_index):
+                for current_index in range(range_index[0], range_index[1]-1,-1):
+                    if i.iloc[current_index, 5] < 10 and i.iloc[current_index, 1] == 0:
+                        list_supporter.append(current_index)
+                        break
+            for range_index_2 in zip(list_supporter, start_index):
+                for current_index in range(range_index_2[0], range_index_2[1]-1,-1):
+                    if i.iloc[current_index, 5] >= 10:
+                        list_final.append(current_index+1)
+                        break
+                    elif current_index == range_index_2[1]:
+                        list_final.append(current_index)
+                        break
+            movment_list_x_0_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 3].tolist() for range_index_1 in zip(list_final, movment_end)]
+            movment_list_y_0_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 4].tolist() for range_index_1 in zip(list_final, movment_end)]
+            xd1= list_supporter
+            xd = movment_list_x_0_to_max
+            
+            
+            #plt.plot( movment_list_y_0_to_max[45], movment_list_x_0_to_max[45])
+            [plt.plot(ll[0], ll[1], c = "b", alpha = 0.2) for ll in zip(movment_list_x_0_to_max, movment_list_y_0_to_max)]
             plt.show()
+
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
 #object_joy.find_bugs(alfa = 0.05)
-#object_joy.trajectory()
+object_joy.trajectory()
 #object_joy.lick_histogram()
 #object_joy.amplitude(event_markers = [0,1], hue = "Event_Marker", fill_nan = True, group = None)
-object_joy.move_type(event_markers = [1,4,0], hue = "Event_Marker", group = "all")
+#object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
