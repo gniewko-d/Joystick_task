@@ -363,9 +363,11 @@ class Joystick_analyzer:
         print("lick_histogram \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data")
         print("")
         
-    def trajectory(self):
+    def trajectory(self, move_range = "0_to_max"):
         global xd, xd1 
         noramlizer = MinMaxScaler()
+        
+        
         for l,i in enumerate(self.list_of_df):
             trial_list = sorted(set(i.loc[:, "TrialCt"].tolist()))
             
@@ -405,10 +407,10 @@ class Joystick_analyzer:
             xd1= list_supporter
             xd = movment_list_x_0_to_max
             
-            
-            #plt.plot( movment_list_y_0_to_max[45], movment_list_x_0_to_max[45])
-            [plt.plot(ll[0], ll[1], c = "b", alpha = 0.2) for ll in zip(movment_list_x_0_to_max, movment_list_y_0_to_max)]
-            plt.show()
+            if move_range == "0_to_max":
+                [plt.plot(ll[0], ll[1], c = "g", alpha = 0.2) for ll in zip(movment_list_x_0_to_max, movment_list_y_0_to_max)]
+                plt.title(self.list_of_files[l])
+                plt.show()
 
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
