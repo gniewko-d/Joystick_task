@@ -31,7 +31,7 @@ class Joystick_analyzer:
     def __init__(self):
         self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks", "Type_move"]
         self.list_of_files = easygui.fileopenbox(title="Select a file", filetypes= "*.csv",  multiple=True)
-        self.gen_df = (pd.read_csv(i,  header=None) for i in self.list_of_files)
+        self.gen_df = (pd.read_csv(i, header=None) for i in self.list_of_files)
         self.list_of_files = [i.split("\\")[-1] for i in  self.list_of_files]
         self.list_of_files = [i.split(".")[0] for i in  self.list_of_files]
         self.list_of_df = []
@@ -364,7 +364,6 @@ class Joystick_analyzer:
         print("")
         
     def trajectory(self, move_range = "0_to_max"):
-        global xd, xd1 
         noramlizer = MinMaxScaler()
         
         
@@ -377,7 +376,6 @@ class Joystick_analyzer:
             
             cropp_movment = [index for range_index in zip(movment_end, start_index) for index in range(range_index[0], range_index[1]-1,-1)]
 
-            #xd1 = movment_end
             movment_list_x = [i.loc[i["TrialCt"] == g , "JoyPos_X"].tolist() for g in trial_list]
             movment_list_x_norm = [ noramlizer.fit_transform(np.array(gg).reshape(-1, 1)) for gg in movment_list_x]
             movment_list_y = [i.loc[i["TrialCt"] == g , "JoyPos_Y"].tolist() for g in trial_list]
@@ -411,12 +409,40 @@ class Joystick_analyzer:
                 [plt.plot(ll[0], ll[1], c = "g", alpha = 0.2) for ll in zip(movment_list_x_0_to_max, movment_list_y_0_to_max)]
                 plt.title(self.list_of_files[l])
                 plt.show()
+    
+    def prob_reward(self, group = "one"):
+        global xd, xd1 
+        df_porb_reward = pd.DataFrame(columns= ["Probability", "ID"])
+        for l,i in enumerate(self.list_of_df):
+            trial_list = sorted(set(i.loc[:, "TrialCt"].tolist()))
+            all_movment = i.loc[((i["Event_Marker"] == 1) | (i["Event_Marker"] == 4)), "Event_Marker"].index.tolist()
+            all_movment.append(all_movment[-1] + 100)
+            xd = all_movment
+            ans1 = [True for indexx in range(len(all_movment)-1) if all_movment[indexx+1] - all_movment[indexx] > 1]
+            all_movment = len(ans1)
+            porb = round(len(trial_list)/all_movment,2)
+            dict_to_add = {"Probability": porb,"ID": self.list_of_files[l]}
+            df_porb_reward = df_porb_reward.append(dict_to_add, ignore_index = True)
+            xd = int(df_porb_reward.mean().values)
+        if group == "one":
+            ax = df_porb_reward.plot(x="ID", y="Probability", kind="bar", rot=-70, title = "Reward probability",figsize = (10,8)).get_figure()
+            ax.tight_layout()
+            df_porb_reward
+            main = tk.Tk()
+            msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+            main.destroy()
+            if msg == "yes":
+                save_file_v3 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+                df_porb_reward.to_excel(save_file_v3 + "//" + self.list_of_files[0] + self.list_of_files[-1] + "_prob_reward" + ".xlsx")
+                save_file_v3_graph = save_file_v3 + "//" + "prob_reward_all" + ".svg"
+                ax.savefig(save_file_v3_graph)
 
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
 #object_joy.find_bugs(alfa = 0.05)
-object_joy.trajectory()
+#object_joy.trajectory()
 #object_joy.lick_histogram()
 #object_joy.amplitude(event_markers = [0,1], hue = "Event_Marker", fill_nan = True, group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
+object_joy.prob_reward()
