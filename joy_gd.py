@@ -111,7 +111,7 @@ class Joystick_analyzer:
         df_result_amplitude = df_amplitude
     
     def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3): 
-       global df_result_lick, switcher, xd
+       global df_result_lick, switcher
        assert len(self.list_of_df) == len(self.list_of_files)
        
        start, stop = pre_stim * 19, post_stim * 19
@@ -122,7 +122,6 @@ class Joystick_analyzer:
 
        columns_.append("Animal_ID")
        df_licks_group = pd.DataFrame(columns= columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
-       list_do_hist = []
        for l,i in enumerate(self.list_of_df):
             index_events = i.index[i['Event_Marker'] == 2].tolist()
             if switcher:
@@ -138,7 +137,7 @@ class Joystick_analyzer:
             prob_lick = prob_lick.iloc[1, :].tolist()
             prob_lick.append(self.list_of_files[l])
             df_licks_group.iloc[l] = prob_lick
-            xd = i
+
        df_licks_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_licks_group.mean()
        df_licks_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
        df_licks_group.set_index("Animal_ID", inplace = True)
@@ -423,11 +422,15 @@ class Joystick_analyzer:
             porb = round(len(trial_list)/all_movment,2)
             dict_to_add = {"Probability": porb,"ID": self.list_of_files[l]}
             df_porb_reward = df_porb_reward.append(dict_to_add, ignore_index = True)
-            xd = int(df_porb_reward.mean().values)
+        mean_prob= float(df_porb_reward.mean().values)
+        xd = mean_prob
         if group == "one":
-            ax = df_porb_reward.plot(x="ID", y="Probability", kind="bar", rot=-70, title = "Reward probability",figsize = (10,8)).get_figure()
+            df_porb_reward.sort_values("Probability", inplace = True)
+            
+            ax = df_porb_reward.plot(x="ID", y="Probability", kind="bar", rot=-70, title = "Reward probability",figsize = (10,8), grid = True).get_figure()
             ax.tight_layout()
-            df_porb_reward
+            dict_to_add = {"Probability": mean_prob,"ID": "Mean"}
+            df_porb_reward = df_porb_reward.append(dict_to_add, ignore_index = True)
             main = tk.Tk()
             msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
             main.destroy()
@@ -436,6 +439,38 @@ class Joystick_analyzer:
                 df_porb_reward.to_excel(save_file_v3 + "//" + self.list_of_files[0] + self.list_of_files[-1] + "_prob_reward" + ".xlsx")
                 save_file_v3_graph = save_file_v3 + "//" + "prob_reward_all" + ".svg"
                 ax.savefig(save_file_v3_graph)
+    
+    def amplitude_time(self, pre_stim = 2, post_stim = 2):
+        global xd
+        assert len(self.list_of_df) == len(self.list_of_files)
+        
+        start, stop = pre_stim * 19, post_stim * 19
+        columns = np.linspace(start = -pre_stim, stop = post_stim, num = start + stop + 1)
+        x = [round(i,2) for i in columns]
+        columns_ = [str(i) for i in x]
+        x = np.array(x)
+        
+        columns_.append("Animal_ID")
+        df_amplitude_time_group = pd.DataFrame(columns= columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
+        for l,i in enumerate(self.list_of_df):
+             index_events = i.index[i['Event_Marker'] == 2].tolist()
+             if switcher:
+                 trial_max = self.new_max
+                 
+             else:
+                 trial_max = i["TrialCt"].max()
+             list_value = [i.iloc[j-start:j+stop + 1, 5].tolist() for j in index_events]
+             df_amplitude_time = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
+            # mean_amp = df_amplitude_time.apply(lambda x: x.value_counts())
+             xd = df_amplitude_time.mean(self, kwargs)
+             
+             #prob_lick.fillna(0, inplace = True)
+             #prob_lick = round(prob_lick / trial_max,2)
+             #prob_lick = prob_lick.iloc[1, :].tolist()
+             #prob_lick.append(self.list_of_files[l])
+             #df_licks_group.iloc[l] = prob_lick
+        
+
 
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
@@ -445,4 +480,5 @@ object_joy.pre_proccesing()
 #object_joy.amplitude(event_markers = [0,1], hue = "Event_Marker", fill_nan = True, group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
-object_joy.prob_reward()
+#object_joy.prob_reward()
+object_joy.amplitude_time()
