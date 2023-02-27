@@ -471,14 +471,34 @@ class Joystick_analyzer:
         df_amplitude_time_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
         df_amplitude_time_group.set_index("Animal_ID", inplace = True)
         xd = df_amplitude_time_group
+        
+        main = tk.Tk()
+        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+        if msg == "yes":
+            main.destroy()
+            save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+        else:
+            main.destroy()
+        
         n = 0
         bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
+        
         for mice_id, row in df_amplitude_time_group.iterrows():
             n += 1
             bar.update(n)
             plt.plot(x,np.array(row), marker, label = mice_id)
+            if normalize:
+                plt.title("Normalized data")
+            else:
+                plt.title("Original")
+            
+            plt.ylabel("Movment amplitude")
+            plt.xlabel("Time [s]")
+            plt.annotate("Max amplitude", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
+            plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, (row.max() + row.min())/2),arrowprops = dict(facecolor='green', shrink=0.1))
+            plt.legend()
             plt.show()
-
+            
 
 object_joy = Joystick_analyzer()
 object_joy.pre_proccesing()
@@ -489,4 +509,4 @@ object_joy.pre_proccesing()
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
-object_joy.amplitude_time(normalize = True)
+object_joy.amplitude_time()
