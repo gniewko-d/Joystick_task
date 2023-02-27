@@ -17,7 +17,7 @@ from tkinter import messagebox
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from sklearn.preprocessing import MinMaxScaler
-
+df_porb_reward = None
 
 # VARIABLES
 df = None
@@ -410,7 +410,7 @@ class Joystick_analyzer:
                 plt.show()
     
     def prob_reward(self, group = "one"):
-        global xd, xd1 
+        global xd, xd1, df_porb_reward
         df_porb_reward = pd.DataFrame(columns= ["Probability", "ID"])
         for l,i in enumerate(self.list_of_df):
             trial_list = sorted(set(i.loc[:, "TrialCt"].tolist()))
@@ -440,10 +440,10 @@ class Joystick_analyzer:
                 save_file_v3_graph = save_file_v3 + "//" + "prob_reward_all" + ".svg"
                 ax.savefig(save_file_v3_graph)
     
-    def amplitude_time(self, pre_stim = 2, post_stim = 2):
-        global xd
+    def amplitude_time(self, pre_stim = 2, post_stim = 2, normalize = False, marker= "r"):
+        global xd,xd1
         assert len(self.list_of_df) == len(self.list_of_files)
-        
+        noramlizer = MinMaxScaler()
         start, stop = pre_stim * 19, post_stim * 19
         columns = np.linspace(start = -pre_stim, stop = post_stim, num = start + stop + 1)
         x = [round(i,2) for i in columns]
@@ -461,15 +461,23 @@ class Joystick_analyzer:
                  trial_max = i["TrialCt"].max()
              list_value = [i.iloc[j-start:j+stop + 1, 5].tolist() for j in index_events]
              df_amplitude_time = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
-            # mean_amp = df_amplitude_time.apply(lambda x: x.value_counts())
-             xd = df_amplitude_time.mean(self, kwargs)
-             
-             #prob_lick.fillna(0, inplace = True)
-             #prob_lick = round(prob_lick / trial_max,2)
-             #prob_lick = prob_lick.iloc[1, :].tolist()
-             #prob_lick.append(self.list_of_files[l])
-             #df_licks_group.iloc[l] = prob_lick
-        
+             if normalize:
+                 df_amplitude_time = noramlizer.fit_transform(df_amplitude_time)
+                 df_amplitude_time = pd.DataFrame(df_amplitude_time,columns= [str(round(k,2)) for k in columns])
+             mice_mean = df_amplitude_time.mean(axis=0).tolist()
+             mice_mean.append(self.list_of_files[l])
+             df_amplitude_time_group.iloc[l]= mice_mean
+        df_amplitude_time_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_amplitude_time_group.mean()
+        df_amplitude_time_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
+        df_amplitude_time_group.set_index("Animal_ID", inplace = True)
+        xd = df_amplitude_time_group
+        n = 0
+        bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
+        for mice_id, row in df_amplitude_time_group.iterrows():
+            n += 1
+            bar.update(n)
+            plt.plot(x,np.array(row), marker, label = mice_id)
+            plt.show()
 
 
 object_joy = Joystick_analyzer()
@@ -481,4 +489,4 @@ object_joy.pre_proccesing()
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
-object_joy.amplitude_time()
+object_joy.amplitude_time(normalize = True)
