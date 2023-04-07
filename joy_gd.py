@@ -17,6 +17,7 @@ from tkinter import messagebox
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from sklearn.preprocessing import MinMaxScaler
+
 df_porb_reward = None
 
 # VARIABLES
@@ -27,6 +28,7 @@ df_result_type_move = None
 xd = None 
 xd1 = None
 switcher = False
+
 class Joystick_analyzer:
     def __init__(self):
         self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks", "Type_move"]
@@ -57,10 +59,10 @@ class Joystick_analyzer:
            df = df.drop(df.index[answer-4:])
            df.iloc[bugged_index, 5] = 0
            self.list_of_df.append(j)
-           
+           print(len(self.list_of_df))
            
     def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True):
-        global df, df_result_amplitude, switcher
+        global df, df_result_amplitude, switcher, xd1, xd
         amplitude_all =[]
         assert len(self.list_of_df) == len(self.list_of_files)
         df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
@@ -94,7 +96,23 @@ class Joystick_analyzer:
                     
             print(f"I filled {null_sum} data points")
         sns.set_style('ticks')
-        sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10")
+        bins= [i for i in range(0,270,10)]
+        if group == None:
+            mean_hight = [round(len(df_amplitude.loc[(df_amplitude["Amplitude_Pos"] >= bins[ii]) & (df_amplitude["Amplitude_Pos"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "TrialCt"]) / len(self.list_of_df)) for ii in range(0, len(bins)-1)]
+            xd1 = mean_hight
+            bins.remove(260)
+            list_of_list = []
+            for i,j in enumerate(mean_hight):
+                fake_data = [bins[i] for value in range(0, j)]
+                list_of_list.append(fake_data)
+            flatten_matrix = [val for sublist in list_of_list for val in sublist]
+            bin_amplitude = pd.Series(flatten_matrix, name = "Amplitude_Pos")
+            xd = bin_amplitude
+            sns.histplot(data = bin_amplitude, kde=True, bins = bins)
+            
+            
+        else:
+            sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10", bins = bins)
         null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
         main = tk.Tk()
         msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
@@ -362,13 +380,17 @@ class Joystick_analyzer:
         print("lick_histogram \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data")
         print("")
         
-    def trajectory(self, move_range = "0_to_max"):
+    def trajectory(self, move_range = "0_to_max", calibrate = False):
+        global xd1
         noramlizer = MinMaxScaler()
         
         
         for l,i in enumerate(self.list_of_df):
             trial_list = sorted(set(i.loc[:, "TrialCt"].tolist()))
-            
+            if calibrate:
+                i["JoyPos_X"] = i["Base_JoyPos_X"] - i["JoyPos_X"]
+                i["JoyPos_Y"] = i["Base_JoyPos_Y"] - i["JoyPos_Y"] 
+            xd1 = i
             start_index = [i.loc[i["TrialCt"] == hh].first_valid_index() for hh in trial_list if i.loc[(i["TrialCt"] == hh) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
             
             movment_end = [i.loc[(i["TrialCt"] == ii) & (i["Event_Marker"] == 1), "Amplitude_Pos"].idxmax() for ii in trial_list if i.loc[(i["TrialCt"] == ii) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
@@ -401,11 +423,19 @@ class Joystick_analyzer:
                         break
             movment_list_x_0_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 3].tolist() for range_index_1 in zip(list_final, movment_end)]
             movment_list_y_0_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 4].tolist() for range_index_1 in zip(list_final, movment_end)]
-            xd1= list_supporter
+            
             xd = movment_list_x_0_to_max
             
             if move_range == "0_to_max":
                 [plt.plot(ll[0], ll[1], c = "g", alpha = 0.2) for ll in zip(movment_list_x_0_to_max, movment_list_y_0_to_max)]
+                plt.title(self.list_of_files[l])
+                plt.show()
+            elif move_range == "start_to_max":
+                [plt.plot(lll[0], lll[1], c = "g", alpha = 0.2) for lll in zip(movment_list_x_start_to_max, movment_list_y_start_to_max)]
+                plt.title(self.list_of_files[l])
+                plt.show()
+            elif move_range == "x_norm":
+                [plt.plot(llll[0], llll[1], c = "g", alpha = 0.2) for llll in zip(movment_list_x, movment_list_y)]
                 plt.title(self.list_of_files[l])
                 plt.show()
     
@@ -512,19 +542,22 @@ class Joystick_analyzer:
                 plt.title("Original")
             plt.ylabel("Movment amplitude")
             plt.xlabel("Time [s]")
+            plt.annotate("Max amplitude", xy = (float(df_amplitude_time_group.iloc[-1][df_amplitude_time_group.iloc[-1] == df_amplitude_time_group.iloc[-1].max()].index[0]), df_amplitude_time_group.iloc[-1].max()), xytext=(-1.0, df_amplitude_time_group.iloc[-1].max()),arrowprops = dict(facecolor='blue', shrink=0.1))
+            plt.annotate("Reward start", xy = (0, df_amplitude_time_group.iloc[-1].min()), xytext=(0, (df_amplitude_time_group.iloc[-1].max() + df_amplitude_time_group.iloc[-1].min())/2),arrowprops = dict(facecolor='green', shrink=0.1))
             plt.legend()
             if msg == "yes":
                  save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "amplitude_time" + ".svg"
                  plt.savefig(save_file_v2)
                  plt.show()
 
-object_joy = Joystick_analyzer()
-object_joy.pre_proccesing()
+#object_joy = Joystick_analyzer()
+#object_joy.pre_proccesing()
 #object_joy.find_bugs(alfa = 0.05)
-#object_joy.trajectory()
+#object_joy.trajectory(calibrate = True)
+
 #object_joy.lick_histogram()
-#object_joy.amplitude(event_markers = [0,1], hue = "Event_Marker", fill_nan = True, group = None)
+#object_joy.amplitude(group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
-object_joy.amplitude_time(group = "mean")
+#object_joy.amplitude_time(group = "mean")
