@@ -25,9 +25,13 @@ df = None
 df_result_amplitude = None
 df_result_lick = None
 df_result_type_move = None
+df_lick_counts = None
+df_result_veloctiy = None
 xd = None 
 xd1 = None
 switcher = False
+u_to_mm = 10  # 10 units t0 1 mm <---<---
+
 
 class Joystick_analyzer:
     def __init__(self):
@@ -41,7 +45,7 @@ class Joystick_analyzer:
     
     
     def pre_proccesing(self):
-        global df
+        global df, switcher
         for i,j in enumerate(self.gen_df):
            j[0]= j[0].apply(lambda x : round((x/1000),2))
            j.columns = self.column_name
@@ -52,84 +56,160 @@ class Joystick_analyzer:
            answer = max_row.index(1801 + max_row[0])
            j = j.drop(j.index[answer-4:])
            trial_max = j["TrialCt"].max()
-           #bugged_index = [j.loc[j["Event_Marker"] == l, "Event_Marker"].lt(0).idxmax() for l in range(1, trial_max + 1)]
            bugged_index = [j.loc[j["TrialCt"] == l, "Event_Marker"].lt(0).idxmax() for l in range(1, trial_max + 1)]
            j.iloc[bugged_index, 5] = 0
            df.columns = self.column_name
            df = df.drop(df.index[answer-4:])
-           df.iloc[bugged_index, 5] = 0
-           self.list_of_df.append(j)
-           print(len(self.list_of_df))
+           df["Amplitude_Pos_mm"] = j["Amplitude_Pos"].apply(lambda x: x/ u_to_mm)
            
-    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True):
+           delta_dist = df["Amplitude_Pos_mm"].tolist()
+           delta_dist = [abs(delta_dist[ff] - delta_dist[ff-1]) for ff in range(1, len(delta_dist))]
+           delta_dist.insert(0, 0)
+           #delta_dist.append(0)
+           df["delta_Amplitude_Pos_mm"] = delta_dist
+           df.iloc[bugged_index, 5] = 0
+           j["Amplitude_Pos_mm" ] = j["Amplitude_Pos"].apply(lambda x: x/ u_to_mm)
+           j["delta_Amplitude_Pos_mm"] = delta_dist
+           
+           time_list = df["Time_in_sec"].tolist()
+           current_velocity = [ round((delta_dist[ii] / (time_list[ii] - time_list[ii-1]))/10 ,2) for ii in range(1, len(time_list))]
+           current_velocity.insert(0, 0)
+           df["Current_velocity_cm_s"] = current_velocity
+           j["Current_velocity_cm_s"] = current_velocity
+           
+           self.list_of_df.append(j)
+           print(j.info())
+        switcher = False
+           
+    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True, y_stat = "count", x_axis = "units"):
         global df, df_result_amplitude, switcher, xd1, xd
         amplitude_all =[]
         assert len(self.list_of_df) == len(self.list_of_files)
-        df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
+        if x_axis == "units":
+            df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos", "Event_Marker"])
+        elif x_axis == "mm":
+            df_amplitude = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Amplitude_Pos_mm", "Event_Marker"])
         for l,i in enumerate(self.list_of_df):
             if switcher:
-                self.good_index
+                self.good_index_list
+                self.good_index = self.good_index_list[l]
                 for k in event_markers:
-                    amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in self.good_index]
-                    mouse_id = [self.list_of_files[l] for m in range(1, len(self.good_index) +1)]
-                    event_marker = [k for j in range(1, len(self.good_index) +1)]
-                    dict_to_add = {"TrialCt": self.good_index, "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
-                    df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
-                    df_amplitude.reset_index(inplace = True, drop = True)
-            
+                    if x_axis == "units":
+                        
+                        amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in self.good_index]
+                        mouse_id = [self.list_of_files[l] for m in range(1, len(self.good_index) +1)]
+                        event_marker = [k for j in range(1, len(self.good_index) +1)]
+                        dict_to_add = {"TrialCt": self.good_index, "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
+                        df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                        df_amplitude.reset_index(inplace = True, drop = True)
+                    elif x_axis == "mm":
+                        
+                        amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos_mm"].max() for j in self.good_index]
+                        mouse_id = [self.list_of_files[l] for m in range(1, len(self.good_index) +1)]
+                        event_marker = [k for j in range(1, len(self.good_index) +1)]
+                        dict_to_add = {"TrialCt": self.good_index, "Mouse_ID": mouse_id, "Amplitude_Pos_mm": amplitude_, "Event_Marker": event_marker}
+                        df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                        df_amplitude.reset_index(inplace = True, drop = True)
             else:
                 trial_max = i["TrialCt"].max()
                 for k in event_markers:
-                    amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
-                    mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
-                    event_marker = [k for j in range(1, trial_max + 1)]
-                    dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
-                    df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
-                    df_amplitude.reset_index(inplace = True, drop = True)
+                    if x_axis == "units":
+                        amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos"].max() for j in range(1, trial_max + 1)]
+                        mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
+                        event_marker = [k for j in range(1, trial_max + 1)]
+                        dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos": amplitude_, "Event_Marker": event_marker}
+                        df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                        df_amplitude.reset_index(inplace = True, drop = True)
+                    elif x_axis == "mm":
+                        amplitude_ = [i.loc[(i["TrialCt"] == j) & (i["Event_Marker"] == k), "Amplitude_Pos_mm"].max() for j in range(1, trial_max + 1)]
+                        mouse_id = [self.list_of_files[l] for m in range(1, trial_max + 1)]
+                        event_marker = [k for j in range(1, trial_max + 1)]
+                        dict_to_add = {"TrialCt": range(1, trial_max + 1), "Mouse_ID": mouse_id, "Amplitude_Pos_mm": amplitude_, "Event_Marker": event_marker}
+                        df_amplitude = df_amplitude.append(pd.DataFrame(dict_to_add))
+                        df_amplitude.reset_index(inplace = True, drop = True)
         if fill_nan:
-            null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
+            if x_axis == "units":
+                null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
+            elif x_axis == "mm":
+                null_sum = df_amplitude["Amplitude_Pos_mm"].isnull().sum()
             for l,i in enumerate(self.list_of_files):
                 for k in event_markers:
                     mask = (df_amplitude["Mouse_ID"] == i) & (df_amplitude["Event_Marker"] == k)
-                    mean = round(df_amplitude.loc[mask, "Amplitude_Pos"].mean(),2)
-                    df_amplitude.loc[mask, "Amplitude_Pos"] = df_amplitude.loc[mask, "Amplitude_Pos"].fillna(mean)
+                    if x_axis == "units":
+                        mean = round(df_amplitude.loc[mask, "Amplitude_Pos"].mean(),2)
+                        df_amplitude.loc[mask, "Amplitude_Pos"] = df_amplitude.loc[mask, "Amplitude_Pos"].fillna(mean)
+                    elif x_axis == "mm":
+                        mean = round(df_amplitude.loc[mask, "Amplitude_Pos_mm"].mean(),2)
+                        df_amplitude.loc[mask, "Amplitude_Pos_mm"] = df_amplitude.loc[mask, "Amplitude_Pos_mm"].fillna(mean)
                     
             print(f"I filled {null_sum} data points")
         sns.set_style('ticks')
-        bins= [i for i in range(0,270,10)]
+        if x_axis == "units":
+            bins= [i for i in range(0,270,10)]
+        elif x_axis == "mm":
+            bins= [i for i in range(0,27,1)]
         if group == None:
-            mean_hight = [round(len(df_amplitude.loc[(df_amplitude["Amplitude_Pos"] >= bins[ii]) & (df_amplitude["Amplitude_Pos"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "TrialCt"]) / len(self.list_of_df)) for ii in range(0, len(bins)-1)]
-            xd1 = mean_hight
-            bins.remove(260)
-            list_of_list = []
-            for i,j in enumerate(mean_hight):
-                fake_data = [bins[i] for value in range(0, j)]
-                list_of_list.append(fake_data)
-            flatten_matrix = [val for sublist in list_of_list for val in sublist]
-            bin_amplitude = pd.Series(flatten_matrix, name = "Amplitude_Pos")
-            xd = bin_amplitude
-            sns.histplot(data = bin_amplitude, kde=True, bins = bins)
-            
-            
+            if x_axis == "units":
+                mean_hight = [round(len(df_amplitude.loc[(df_amplitude["Amplitude_Pos"] >= bins[ii]) & (df_amplitude["Amplitude_Pos"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "TrialCt"]) / len(self.list_of_df)) for ii in range(0, len(bins)-1)]
+                mean_event = [df_amplitude.loc[(df_amplitude["Amplitude_Pos"] >= bins[ii]) & (df_amplitude["Amplitude_Pos"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "Event_Marker"]  for ii in range(0, len(bins)-1)]
+            #mean_amp = [df_amplitude.loc[(df_amplitude["Amplitude_Pos"] >= bins[ii]) & (df_amplitude["Amplitude_Pos"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "Event_Marker"]  for ii in range(0, len(bins)-1)]
+                xd1 = mean_hight
+                bins.remove(260)
+                list_of_list = []
+                for i,j in enumerate(mean_hight):
+                    fake_data = [bins[i] + 5 for value in range(0, j)]
+                    list_of_list.append(fake_data)
+                flatten_matrix = [val for sublist in list_of_list for val in sublist]
+                bin_amplitude = pd.Series(flatten_matrix, name = "Amplitude_Pos")
+                xd = bin_amplitude
+                sns.histplot(data = bin_amplitude, bins = bins, stat = y_stat, fill = True, kde=True)
+                plt.legend(labels=[f"n = {len(self.list_of_df)}"])
+            elif x_axis == "mm":
+                mean_hight = [round(len(df_amplitude.loc[(df_amplitude["Amplitude_Pos_mm"] >= bins[ii]) & (df_amplitude["Amplitude_Pos_mm"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "TrialCt"]) / len(self.list_of_df)) for ii in range(0, len(bins)-1)]
+                mean_event = [df_amplitude.loc[(df_amplitude["Amplitude_Pos_mm"] >= bins[ii]) & (df_amplitude["Amplitude_Pos_mm"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "Event_Marker"]  for ii in range(0, len(bins)-1)]
+            #mean_amp = [df_amplitude.loc[(df_amplitude["Amplitude_Pos"] >= bins[ii]) & (df_amplitude["Amplitude_Pos"] < bins[ii+1]) & (df_amplitude["Event_Marker"].isin(event_markers)), "Event_Marker"]  for ii in range(0, len(bins)-1)]
+                xd1 = mean_hight
+                bins.remove(26)
+                list_of_list = []
+                for i,j in enumerate(mean_hight):
+                    fake_data = [bins[i] + 0.5 for value in range(0, j)]
+                    list_of_list.append(fake_data)
+                flatten_matrix = [val for sublist in list_of_list for val in sublist]
+                bin_amplitude = pd.Series(flatten_matrix, name = "Amplitude_Pos_mm")
+                xd = bin_amplitude
+                sns.histplot(data = bin_amplitude, bins = bins, stat = y_stat, fill = True, kde=True)
+                plt.legend(labels=[f"n = {len(self.list_of_df)}"])
         else:
-            sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10", bins = bins)
-        null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
+            xd = df_amplitude
+            if x_axis == "units":
+                sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10", bins = bins, stat = y_stat)
+            elif x_axis == "mm":
+                sns.displot(df_amplitude, x = "Amplitude_Pos_mm", hue = hue, col = group, kde = kde, color = "green", palette = "tab10", bins = bins, stat = y_stat)
+        if x_axis == "units":
+            null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
+        elif x_axis == "mm":
+            null_sum = df_amplitude["Amplitude_Pos_mm"].isnull().sum()
         main = tk.Tk()
         msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
         if msg == "yes":
             main.destroy()
             save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
-            save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + ".svg"
+            if group == None:
+                save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + "_amplitude_mean" + ".svg"
+                bin_amplitude.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_amplitude_mean" + ".xlsx")
+            else:
+                save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + "_amplitude_each_group" + ".svg"
             plt.savefig(save_file_v2)
             plt.show()
             df_amplitude.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_amplitude" + ".xlsx")
+            
         else:
             plt.show()
             main.destroy()
         df_result_amplitude = df_amplitude
     
-    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3): 
-       global df_result_lick, switcher
+    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, stat = "prob"): 
+       global df_result_lick, switcher, xd, df_lick_counts
        assert len(self.list_of_df) == len(self.list_of_files)
        
        start, stop = pre_stim * 19, post_stim * 19
@@ -139,27 +219,37 @@ class Joystick_analyzer:
        x = np.array(x)
 
        columns_.append("Animal_ID")
-       df_licks_group = pd.DataFrame(columns= columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
+       df_licks_group = pd.DataFrame(columns = columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
        for l,i in enumerate(self.list_of_df):
             index_events = i.index[i['Event_Marker'] == 2].tolist()
             if switcher:
-                trial_max = self.new_max
-                
+                print(f"len: {len(i)}")
+                trial_max = self.new_max[l]
             else:
                 trial_max = i["TrialCt"].max()
+            print(" ")
             list_value = [i.iloc[j-start:j+stop + 1, 14].tolist() for j in index_events]
             df_licks = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
             prob_lick = df_licks.apply(lambda x: x.value_counts())
             prob_lick.fillna(0, inplace = True)
-            prob_lick = round(prob_lick / trial_max,2)
-            prob_lick = prob_lick.iloc[1, :].tolist()
-            prob_lick.append(self.list_of_files[l])
-            df_licks_group.iloc[l] = prob_lick
-
+            df_lick_counts = prob_lick
+            if stat == "prob":
+                prob_lick = round(prob_lick / trial_max,2)
+                prob_lick = prob_lick.iloc[1, :].tolist()
+                prob_lick.append(self.list_of_files[l])
+                df_licks_group.iloc[l] = prob_lick
+            elif stat == "odds" :
+                odds = [ round(a / b, 2) for a, b in zip(prob_lick.iloc[1, :].tolist(), prob_lick.iloc[0, :].tolist())] 
+                odds.append(self.list_of_files[l])
+                df_licks_group.iloc[l] = odds
        df_licks_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_licks_group.mean()
        df_licks_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
        df_licks_group.set_index("Animal_ID", inplace = True)
        df_result_lick = df_licks_group
+       if stat == "prob":
+           y_label = "Probability of lick"
+       elif stat == "odds":
+           y_label = "Lick/No-lick ratio"
        main = tk.Tk()
        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
        if msg == "yes":
@@ -175,14 +265,14 @@ class Joystick_analyzer:
                bar.update(n)
                plt.plot(x,np.array(row), marker, label = index)
                plt.title("Original")
-               plt.ylabel("Probability density")
+               plt.ylabel(y_label)
                plt.xlabel("Time [s]")
                plt.annotate("Max prob", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
                plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, (row.max() + row.min())/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.legend()
                
                if msg == "yes":
-                   save_file_v2 = save_file_v1 + "//" + index + "_" + "orginal" + ".svg"
+                   save_file_v2 = save_file_v1 + "//" + index + "_" + "orginal_lick" + ".svg"
                    plt.savefig(save_file_v2)
                    plt.show()
                else:
@@ -193,23 +283,23 @@ class Joystick_analyzer:
                    plt.annotate("Max prob", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                    plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
                    plt.title("Smoothed")
-                   plt.ylabel("Probability density")
+                   plt.ylabel(y_label)
                    plt.xlabel("Time [s]")
                    plt.legend()
                    if msg == "yes":
-                       save_file_v2 = save_file_v1 + "//" + index + "_" + "smoothed" + ".svg"
+                       save_file_v2 = save_file_v1 + "//" + index + "_" + "smoothed_lick" + ".svg"
                        plt.savefig(save_file_v2)
                        plt.show()
                    else:
                        plt.show()
        elif group == "mean":
-           plt.plot(x,df_licks_group.iloc[-1], marker, label = "Mean")
+           plt.plot(x,df_licks_group.iloc[-1], marker, label = "Mean_lick")
            plt.title("Original")
-           plt.ylabel("Probability density")
+           plt.ylabel(y_label)
            plt.xlabel("Time [s]")
            plt.legend()
            if msg == "yes":
-                save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "orginal" + ".svg"
+                save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "orginal_lick" + ".svg"
                 plt.savefig(save_file_v2)
                 plt.show()
            else:
@@ -220,11 +310,11 @@ class Joystick_analyzer:
                plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.plot(x,yhat, marker, label = "Mean")
                plt.title("Smoothed")
-               plt.ylabel("Probability density")
+               plt.ylabel(y_label)
                plt.xlabel("Time [s]")
                plt.legend()
            if msg == "yes":
-               save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "smoothed" + ".svg"
+               save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "smoothed_lick" + ".svg"
                plt.savefig(save_file_v2)
                plt.show()
            else:
@@ -247,7 +337,10 @@ class Joystick_analyzer:
         main = tk.Tk()
         msg2 = tk.messagebox.askquestion ('Delete window','Do you want to delete bugged data?',icon = 'warning')
         main.destroy()
+        self.new_max = []
+        self.good_index_list = []
         for l,i in enumerate(self.list_of_df):
+            print(f"len before: {len(i)}")
             base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
             base_y_upper = i.loc[0, "Base_JoyPos_Y"] + i.loc[0, "Base_JoyPos_Y"] * alfa
             base_x_lower = i.loc[0, "Base_JoyPos_X"] - i.loc[0, "Base_JoyPos_X"] * alfa
@@ -259,17 +352,22 @@ class Joystick_analyzer:
             y_bool = [True if base_y_lower < kk < base_y_upper else False for kk in ans_y]
             x_y_bool = ["ok" if x == True and y == True else "not ok" if x == True or y == True else "very bad" for x, y in zip(x_bool, y_bool)]
             df_result = pd.DataFrame({"x_bool": x_bool, "y_bool": y_bool, "x_y_bool": x_y_bool}, index = range(1,trial_max +1))
+            xd1 = df_result
             print("Mice ID: ", self.list_of_files[l],"\n", df_result["x_y_bool"].value_counts(), "\n" ,round(df_result["x_y_bool"].value_counts(normalize=True),2))
             print(" ")
             trial_max = i["TrialCt"].max()
             if msg2 == "yes":
                 buggs_index = df_result.index[(df_result['x_y_bool'] == "not ok") | (df_result['x_y_bool'] == "very bad")].tolist()
                 self.good_index = df_result.index[(df_result['x_y_bool'] == "ok")].tolist()
-                self.new_max =  trial_max - len(buggs_index)
+                self.good_index_list.append(self.good_index)
+                self.new_max.append(trial_max - len(buggs_index))
                 i.drop(i[i["TrialCt"].isin(buggs_index)].index, inplace = True)
+                i.reset_index(inplace = True, drop = True)
                 self.list_of_df_v1.append(i)
                 switcher = True
+                xd = i
         print("Test completed")
+        print(f"len after: {len(i)}")
         if msg2 == "yes":
             self.list_of_df = self.list_of_df_v1
     def move_type(self, hue = None, event_markers = [0,1,2,3,4], group = "all"):
@@ -375,11 +473,11 @@ class Joystick_analyzer:
             else:
                 plt.show()
     def help_me(self):
-        print("amplitude \n function parameters:\n event_markers - which events will be included in graph [value: 0,1,2,3,4 (int)] \n hue - events markers will be presented separately or jointly [value: Event_Marker (string), None]\n kde - data will be presented as an output of kernel density estimation [value: True (bool), False (bool)]\n group - graphs will be created for each mice separately or together [value: Mouse_ID (string), None]\n fill_nan - fill missing data [value: True (bool), False (bool)]")
+        print("amplitude \n function parameters:\n event_markers - which events will be included in graph [value: 0,1,2,3,4 (int)] \n hue - events markers will be presented separately or jointly [value: Event_Marker (string), None (key word)]\n kde - data will be presented as an output of kernel density estimation [value: True (bool), False (bool)]\n group - graphs will be created for each mice separately or together [value: Mouse_ID (string), None (key word)]\n fill_nan - fill missing data [value: True (bool), False (bool)]\n y_stat - type of statistic used to create y axis - check seaborn API to use it correctly [value: count (string), frequency (string), probability (string), percent (string), density (string)]\n x_axis - x axis values will be presented as units or mmx axis values will be presented as units or mm [value: units (string), mm (string)]]")
         print("")
-        print("lick_histogram \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data")
+        print("lick_histogram \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data [value: (int)]\n stat - y axis will be presetned as probability of lick or ratio lick/no-lick [value: prob, odds (string, )")
         print("")
-        
+        print("veloctiy \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data [value: (int)]\n sem - standard error of mean will be added to graph [value: True (bool), False (bool)]")
     def trajectory(self, move_range = "0_to_max", calibrate = False):
         global xd1
         noramlizer = MinMaxScaler()
@@ -549,15 +647,140 @@ class Joystick_analyzer:
                  save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "amplitude_time" + ".svg"
                  plt.savefig(save_file_v2)
                  plt.show()
-
+    def veloctiy(self, pre_stim = 2, post_stim = 0, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, sem = True):
+        global df_result_veloctiy, switcher, xd, xd1
+        assert len(self.list_of_df) == len(self.list_of_files)
+        
+        start, stop = pre_stim * 19, post_stim * 19
+        columns = np.linspace(start = -pre_stim, stop = post_stim, num = start + stop + 1)
+        x = [round(i,2) for i in columns]
+        columns_ = [str(i) for i in x]
+        x = np.array(x)
+        
+        columns_.append("Animal_ID")
+        sem_velocity_list = []
+        df_velocity_group = pd.DataFrame(columns = columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
+        
+        for l,i in enumerate(self.list_of_df):
+             index_events = i.index[i['Event_Marker'] == 2].tolist()
+             if switcher:
+                 print(f"len: {len(i)}")
+                 trial_max = self.new_max[l]
+             else:
+                 trial_max = i["TrialCt"].max()
+             print(" ")
+             list_value = [i.iloc[j-start:j+stop + 1, 19].tolist() for j in index_events]
+             df_velocity = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
+             if sem:
+                 sem_velocity = df_velocity.std().tolist()
+                 sem_velocity_list.append(sem_velocity)
+             df_velocity = df_velocity.mean().tolist()
+             df_velocity.append(self.list_of_files[l])
+             df_velocity_group.iloc[l] = df_velocity
+        sem_velocity_list.append(df_velocity_group.std().tolist())
+        xd = sem_velocity_list
+        df_velocity_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_velocity_group.mean()
+        df_velocity_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
+        df_velocity_group.set_index("Animal_ID", inplace = True)
+        
+        main = tk.Tk()
+        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+        if msg == "yes":
+            main.destroy()
+            save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
+        else:
+            main.destroy()
+        y_label = "Velocity [cm/s]"
+        if group == "all":
+            bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
+            n = 0
+            iterator = 0
+            for index, row in df_velocity_group.iterrows():
+                n += 1
+                bar.update(n)
+                plt.plot(x,np.array(row), marker, label = index)
+                xd1 = np.array(row)
+                if sem:
+                    y = np.array(row)
+                    error_sem = np.array(sem_velocity_list[iterator])
+                    upper_band = np.asfarray(y + error_sem)
+                    lower_band = np.asfarray(y - error_sem)
+                    plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+                    iterator += 1
+                plt.title("Original")
+                plt.ylabel(y_label)
+                plt.xlabel("Time [s]")
+                plt.annotate("Max velocity", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
+                plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, (row.max() + row.min())/2),arrowprops = dict(facecolor='green', shrink=0.1))
+                plt.legend()
+                
+                if msg == "yes":
+                    save_file_v2 = save_file_v1 + "//" + index + "_" + "orginal_velocity" + ".svg"
+                    plt.savefig(save_file_v2)
+                    plt.show()
+                else:
+                    plt.show()
+                if smooth:
+                    yhat = savgol_filter(np.array(row), window_length, polyorder)
+                    plt.plot(x,yhat, marker, label = index)
+                    plt.annotate("Max velocity", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
+                    plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
+                    plt.title("Smoothed")
+                    plt.ylabel(y_label)
+                    plt.xlabel("Time [s]")
+                    plt.legend()
+                    if msg == "yes":
+                        save_file_v2 = save_file_v1 + "//" + index + "_" + "smoothed_velocity" + ".svg"
+                        plt.savefig(save_file_v2)
+                        plt.show()
+                    else:
+                        plt.show()
+        elif group == "mean":
+            plt.plot(x, df_velocity_group.iloc[-1], marker, label = "Mean")
+            if sem:
+                y = np.array(df_velocity_group.iloc[-1])
+                error_sem = np.array(sem_velocity_list[-1])
+                upper_band = np.asfarray(y + error_sem)
+                lower_band = np.asfarray(y - error_sem)
+                plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+            plt.title("Original")
+            plt.ylabel(y_label)
+            plt.xlabel("Time [s]")
+            plt.legend()
+            if msg == "yes":
+                 save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "orginal_velocity" + ".svg"
+                 plt.savefig(save_file_v2)
+                 plt.show()
+            else:
+                 plt.show()
+            if smooth:
+                yhat = savgol_filter(np.array(df_velocity_group.iloc[-1]), window_length, polyorder)
+                plt.annotate("Max velocity", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
+                plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
+                plt.plot(x,yhat, marker, label = "Mean")
+                plt.title("Smoothed")
+                plt.ylabel(y_label)
+                plt.xlabel("Time [s]")
+                plt.legend()
+            if msg == "yes":
+                save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "smoothed_velocity" + ".svg"
+                plt.savefig(save_file_v2)
+                plt.show()
+            else:
+                plt.show()
+        
+        df_velocity_group["Mean"] = df_velocity_group.mean(axis =1)
+        df_result_veloctiy = df_velocity_group
+        if msg == "yes":
+             df_velocity_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_velocity" + ".xlsx")
 #object_joy = Joystick_analyzer()
 #object_joy.pre_proccesing()
-#object_joy.find_bugs(alfa = 0.05)
-#object_joy.trajectory(calibrate = True)
+#object_joy.find_bugs(alfa = 0.36)
 
-#object_joy.lick_histogram()
-#object_joy.amplitude(group = None)
+#object_joy.veloctiy(group = "mean")
+#object_joy.amplitude(event_markers = [1,3,2], x_axis = "units", hue = "Event_Marker", group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
-#object_joy.amplitude_time(group = "mean")
+#object_joy.amplitude_time(group = "mean", x_axis == "mm")
+#object_joy.lick_histogram(stat = "odds")
