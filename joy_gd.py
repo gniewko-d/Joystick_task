@@ -777,8 +777,8 @@ class Joystick_analyzer:
 #object_joy.pre_proccesing()
 #object_joy.find_bugs(alfa = 0.36)
 
-#object_joy.veloctiy(group = "mean")
-#object_joy.amplitude(event_markers = [1,3,2], x_axis = "units", hue = "Event_Marker", group = None)
+#object_joy.veloctiy(group = "all")
+#object_joy.amplitude(event_markers = [1,3,2], x_axis = "mm", hue = "Event_Marker", group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
