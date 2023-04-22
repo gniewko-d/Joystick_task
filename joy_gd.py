@@ -30,8 +30,9 @@ df_result_veloctiy = None
 xd = None 
 xd1 = None
 switcher = False
-u_to_mm = 10  # 10 units t0 1 mm <---<---
-
+u_to_mm = 10  # 10 units t0 1 mm <--- <---
+base_joypos_X = 505
+base_joypos_Y = 515
 
 class Joystick_analyzer:
     def __init__(self):
@@ -44,7 +45,7 @@ class Joystick_analyzer:
         self.group = ["SAL", "CNO"]
     
     
-    def pre_proccesing(self):
+    def pre_proccesing(self, cut_to = False):
         global df, switcher
         for i,j in enumerate(self.gen_df):
            j[0]= j[0].apply(lambda x : round((x/1000),2))
@@ -76,7 +77,11 @@ class Joystick_analyzer:
            current_velocity.insert(0, 0)
            df["Current_velocity_cm_s"] = current_velocity
            j["Current_velocity_cm_s"] = current_velocity
-           
+           if cut_to:
+               df_sort = df.iloc[(df["Time_in_sec"]- cut_to).abs().argsort()[:1]]
+               drop_start = df_sort.index.tolist()[0]
+               df = df.iloc[0:drop_start]
+               j = j.iloc[0: drop_start]
            self.list_of_df.append(j)
            print(j.info())
         switcher = False
@@ -208,7 +213,7 @@ class Joystick_analyzer:
             main.destroy()
         df_result_amplitude = df_amplitude
     
-    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, stat = "prob"): 
+    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, stat = "prob", sem = True): 
        global df_result_lick, switcher, xd, df_lick_counts
        assert len(self.list_of_df) == len(self.list_of_files)
        
@@ -220,6 +225,7 @@ class Joystick_analyzer:
 
        columns_.append("Animal_ID")
        df_licks_group = pd.DataFrame(columns = columns_, index = [i for i in range(0, len(self.list_of_df)+1)])
+       sem_lick_group = []
        for l,i in enumerate(self.list_of_df):
             index_events = i.index[i['Event_Marker'] == 2].tolist()
             if switcher:
@@ -230,6 +236,7 @@ class Joystick_analyzer:
             print(" ")
             list_value = [i.iloc[j-start:j+stop + 1, 14].tolist() for j in index_events]
             df_licks = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
+            lick_rate = df_licks
             prob_lick = df_licks.apply(lambda x: x.value_counts())
             prob_lick.fillna(0, inplace = True)
             df_lick_counts = prob_lick
@@ -242,6 +249,18 @@ class Joystick_analyzer:
                 odds = [ round(a / b, 2) for a, b in zip(prob_lick.iloc[1, :].tolist(), prob_lick.iloc[0, :].tolist())] 
                 odds.append(self.list_of_files[l])
                 df_licks_group.iloc[l] = odds
+            elif stat == "rate" :
+                for i in range(0, lick_rate.shape[1]):
+                    lick_rate.iloc[:,i] = lick_rate.iloc[:,i].apply(lambda x: (x * 1000)/50) # bin size 50 ms
+                if sem:
+                    lick_rate_sem = lick_rate.sem().tolist()
+                    sem_lick_group.append(lick_rate_sem)
+                
+                lick_rate= lick_rate.mean().tolist()
+                lick_rate.append(self.list_of_files[l])
+                df_licks_group.iloc[l] = lick_rate
+       if stat == "rate":
+           sem_lick_group.append(df_licks_group.sem().tolist())
        df_licks_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_licks_group.mean()
        df_licks_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
        df_licks_group.set_index("Animal_ID", inplace = True)
@@ -250,6 +269,8 @@ class Joystick_analyzer:
            y_label = "Probability of lick"
        elif stat == "odds":
            y_label = "Lick/No-lick ratio"
+       elif stat == "rate":
+           y_label = "Mean lick rate (per sec)"
        main = tk.Tk()
        msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
        if msg == "yes":
@@ -260,14 +281,23 @@ class Joystick_analyzer:
        if group == "all":
            bar = progressbar.ProgressBar(max_value=progressbar.UnknownLength)
            n = 0
+           iterator_v1 = 0 
+           xd = sem_lick_group
            for index, row in df_licks_group.iterrows():
                n += 1
                bar.update(n)
+               if sem and stat == "rate":
+                   y = np.array(row)
+                   error_sem = np.array(sem_lick_group[iterator_v1])
+                   upper_band = np.asfarray(y + error_sem)
+                   lower_band = np.asfarray(y - error_sem)
+                   plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+                   iterator_v1 +=1
                plt.plot(x,np.array(row), marker, label = index)
                plt.title("Original")
                plt.ylabel(y_label)
                plt.xlabel("Time [s]")
-               plt.annotate("Max prob", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
+               plt.annotate("Max", xy = (float(row[row == row.max()].index[0]), row.max()), xytext=(-1.0, row.max()),arrowprops = dict(facecolor='blue', shrink=0.1))
                plt.annotate("Reward start", xy = (0, row.min()), xytext=(0, (row.max() + row.min())/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.legend()
                
@@ -279,8 +309,14 @@ class Joystick_analyzer:
                    plt.show()
                if smooth:
                    yhat = savgol_filter(np.array(row), window_length, polyorder)
+                   if sem and stat == "rate":
+                       yhat_error_sem = savgol_filter(np.array(sem_lick_group[iterator_v1-1]), window_length, polyorder)
+                       upper_band = np.asfarray(yhat + yhat_error_sem)
+                       lower_band = np.asfarray(yhat - yhat_error_sem)
+                       plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+                       
                    plt.plot(x,yhat, marker, label = index)
-                   plt.annotate("Max prob", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
+                   plt.annotate("Max", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                    plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
                    plt.title("Smoothed")
                    plt.ylabel(y_label)
@@ -293,6 +329,12 @@ class Joystick_analyzer:
                    else:
                        plt.show()
        elif group == "mean":
+           if sem and stat == "rate":
+               y = np.array(df_licks_group.iloc[-1])
+               error_sem = np.array(sem_lick_group[-1])
+               upper_band = np.asfarray(y + error_sem)
+               lower_band = np.asfarray(y - error_sem)
+               plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
            plt.plot(x,df_licks_group.iloc[-1], marker, label = "Mean_lick")
            plt.title("Original")
            plt.ylabel(y_label)
@@ -306,7 +348,12 @@ class Joystick_analyzer:
                 plt.show()
            if smooth:
                yhat = savgol_filter(np.array(df_licks_group.iloc[-1]), window_length, polyorder)
-               plt.annotate("Max prob", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
+               if sem and stat == "rate":
+                   yhat_error_sem = savgol_filter(np.array(sem_lick_group[-1]), window_length, polyorder)
+                   upper_band_sem = np.asfarray(yhat + yhat_error_sem)
+                   lower_band_sem = np.asfarray(yhat - yhat_error_sem)
+                   plt.fill_between(x, upper_band_sem , lower_band_sem, alpha = 0.4, color = "r")
+               plt.annotate("Max", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.plot(x,yhat, marker, label = "Mean")
                plt.title("Smoothed")
@@ -322,6 +369,7 @@ class Joystick_analyzer:
         
        if msg == "yes":
             df_licks_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_lick" + ".xlsx")
+    
     def files_name(self):
         for i,j in enumerate(self.list_of_files):
             if self.group[0] in str(j):
@@ -330,8 +378,9 @@ class Joystick_analyzer:
                 print(colored(i,"green"), colored(j, "green"))
             else:
                 print(colored(i,"blue"), colored(j, "blue"))
-    def find_bugs(self, alfa = 0.10):
-        global xd, xd1, switcher
+    
+    def find_bugs(self, alfa = 0.10, automatic = True):
+        global xd, xd1, switcher, base_joypos_X, base_joypos_Y
         self.list_of_df_v1 = []
         print("Test started\n")
         main = tk.Tk()
@@ -339,12 +388,18 @@ class Joystick_analyzer:
         main.destroy()
         self.new_max = []
         self.good_index_list = []
+        if not automatic:
+            base_x_upper = base_joypos_X + base_joypos_X * alfa
+            base_y_upper = base_joypos_Y + base_joypos_Y * alfa
+            base_x_lower = base_joypos_X - base_joypos_X * alfa
+            base_y_lower = base_joypos_Y - base_joypos_Y * alfa
         for l,i in enumerate(self.list_of_df):
             print(f"len before: {len(i)}")
-            base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
-            base_y_upper = i.loc[0, "Base_JoyPos_Y"] + i.loc[0, "Base_JoyPos_Y"] * alfa
-            base_x_lower = i.loc[0, "Base_JoyPos_X"] - i.loc[0, "Base_JoyPos_X"] * alfa
-            base_y_lower = i.loc[0, "Base_JoyPos_Y"] - i.loc[0, "Base_JoyPos_Y"] * alfa
+            if automatic:
+                base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
+                base_y_upper = i.loc[0, "Base_JoyPos_Y"] + i.loc[0, "Base_JoyPos_Y"] * alfa
+                base_x_lower = i.loc[0, "Base_JoyPos_X"] - i.loc[0, "Base_JoyPos_X"] * alfa
+                base_y_lower = i.loc[0, "Base_JoyPos_Y"] - i.loc[0, "Base_JoyPos_Y"] * alfa
             trial_max = i["TrialCt"].max()
             ans_x = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_X"]).pop() for ii in range(1,trial_max +1)]
             ans_y = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_Y"]).pop() for ii in range(1,trial_max +1)]
@@ -370,6 +425,7 @@ class Joystick_analyzer:
         print(f"len after: {len(i)}")
         if msg2 == "yes":
             self.list_of_df = self.list_of_df_v1
+    
     def move_type(self, hue = None, event_markers = [0,1,2,3,4], group = "all"):
         global df_result_type_move, xd
         df_type_move = pd.DataFrame(columns= ["Pull", "Push", "None", "Id"])
@@ -472,12 +528,14 @@ class Joystick_analyzer:
                 plt.show()
             else:
                 plt.show()
+    
     def help_me(self):
         print("amplitude \n function parameters:\n event_markers - which events will be included in graph [value: 0,1,2,3,4 (int)] \n hue - events markers will be presented separately or jointly [value: Event_Marker (string), None (key word)]\n kde - data will be presented as an output of kernel density estimation [value: True (bool), False (bool)]\n group - graphs will be created for each mice separately or together [value: Mouse_ID (string), None (key word)]\n fill_nan - fill missing data [value: True (bool), False (bool)]\n y_stat - type of statistic used to create y axis - check seaborn API to use it correctly [value: count (string), frequency (string), probability (string), percent (string), density (string)]\n x_axis - x axis values will be presented as units or mmx axis values will be presented as units or mm [value: units (string), mm (string)]]")
         print("")
         print("lick_histogram \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data [value: (int)]\n stat - y axis will be presetned as probability of lick or ratio lick/no-lick [value: prob, odds (string, )")
         print("")
         print("veloctiy \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data [value: (int)]\n sem - standard error of mean will be added to graph [value: True (bool), False (bool)]")
+    
     def trajectory(self, move_range = "0_to_max", calibrate = False):
         global xd1
         noramlizer = MinMaxScaler()
@@ -647,6 +705,7 @@ class Joystick_analyzer:
                  save_file_v2 = save_file_v1 + "//" + "Mean" + "_" + "amplitude_time" + ".svg"
                  plt.savefig(save_file_v2)
                  plt.show()
+    
     def veloctiy(self, pre_stim = 2, post_stim = 0, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, sem = True):
         global df_result_veloctiy, switcher, xd, xd1
         assert len(self.list_of_df) == len(self.list_of_files)
@@ -672,12 +731,12 @@ class Joystick_analyzer:
              list_value = [i.iloc[j-start:j+stop + 1, 19].tolist() for j in index_events]
              df_velocity = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
              if sem:
-                 sem_velocity = df_velocity.std().tolist()
+                 sem_velocity = df_velocity.sem().tolist()
                  sem_velocity_list.append(sem_velocity)
              df_velocity = df_velocity.mean().tolist()
              df_velocity.append(self.list_of_files[l])
              df_velocity_group.iloc[l] = df_velocity
-        sem_velocity_list.append(df_velocity_group.std().tolist())
+        sem_velocity_list.append(df_velocity_group.sem().tolist())
         xd = sem_velocity_list
         df_velocity_group.iloc[len(self.list_of_df), 0: len(columns_)-1] = df_velocity_group.mean()
         df_velocity_group.loc[len(self.list_of_df), "Animal_ID"] = "Mean"
@@ -722,6 +781,11 @@ class Joystick_analyzer:
                     plt.show()
                 if smooth:
                     yhat = savgol_filter(np.array(row), window_length, polyorder)
+                    if sem:
+                        yhat_error_sem = savgol_filter(np.array(sem_velocity_list[iterator-1]), window_length, polyorder)
+                        upper_band_sem = np.asfarray(yhat + yhat_error_sem)
+                        lower_band_sem = np.asfarray(yhat - yhat_error_sem)
+                        plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
                     plt.plot(x,yhat, marker, label = index)
                     plt.annotate("Max velocity", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                     plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
@@ -755,6 +819,11 @@ class Joystick_analyzer:
                  plt.show()
             if smooth:
                 yhat = savgol_filter(np.array(df_velocity_group.iloc[-1]), window_length, polyorder)
+                if sem:
+                    yhat_error_sem = savgol_filter(np.array(sem_velocity_list[-1]), window_length, polyorder)
+                    upper_band_sem = np.asfarray(yhat + yhat_error_sem)
+                    lower_band_sem = np.asfarray(yhat - yhat_error_sem)
+                    plt.fill_between(x, upper_band_sem , lower_band_sem, alpha = 0.4, color = "r")
                 plt.annotate("Max velocity", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                 plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
                 plt.plot(x,yhat, marker, label = "Mean")
@@ -773,14 +842,15 @@ class Joystick_analyzer:
         df_result_veloctiy = df_velocity_group
         if msg == "yes":
              df_velocity_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_velocity" + ".xlsx")
-#object_joy = Joystick_analyzer()
-#object_joy.pre_proccesing()
-#object_joy.find_bugs(alfa = 0.36)
 
-#object_joy.veloctiy(group = "all")
+#object_joy = Joystick_analyzer()
+#object_joy.pre_proccesing(cut_to = 1700)
+#object_joy.find_bugs(alfa = 0.36, automatic = False)
+
+#object_joy.veloctiy(group = "mean")
 #object_joy.amplitude(event_markers = [1,3,2], x_axis = "mm", hue = "Event_Marker", group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
 #object_joy.amplitude_time(group = "mean", x_axis == "mm")
-#object_joy.lick_histogram(stat = "odds")
+#object_joy.lick_histogram(stat = "rate", group = "mean")
