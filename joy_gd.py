@@ -213,7 +213,7 @@ class Joystick_analyzer:
             main.destroy()
         df_result_amplitude = df_amplitude
     
-    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, stat = "prob", sem = True): 
+    def lick_histogram(self, pre_stim = 2, post_stim = 2, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, stat = "prob", sem = True, x_lim = False, y_lim = False): 
        global df_result_lick, switcher, xd, df_lick_counts
        assert len(self.list_of_df) == len(self.list_of_files)
        
@@ -293,6 +293,11 @@ class Joystick_analyzer:
                    lower_band = np.asfarray(y - error_sem)
                    plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
                    iterator_v1 +=1
+               if stat == "rate":
+                   if x_lim:
+                       plt.xlim(x_lim[0], x_lim[1])
+                   if y_lim:
+                       plt.ylim(y_lim[0], y_lim[1])
                plt.plot(x,np.array(row), marker, label = index)
                plt.title("Original")
                plt.ylabel(y_label)
@@ -314,7 +319,11 @@ class Joystick_analyzer:
                        upper_band = np.asfarray(yhat + yhat_error_sem)
                        lower_band = np.asfarray(yhat - yhat_error_sem)
                        plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
-                       
+                   if stat == "rate":
+                       if x_lim:
+                           plt.xlim(x_lim[0], x_lim[1])
+                       if y_lim:
+                           plt.ylim(y_lim[0], y_lim[1])
                    plt.plot(x,yhat, marker, label = index)
                    plt.annotate("Max", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                    plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
@@ -335,6 +344,11 @@ class Joystick_analyzer:
                upper_band = np.asfarray(y + error_sem)
                lower_band = np.asfarray(y - error_sem)
                plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+           if stat == "rate":
+               if x_lim:
+                   plt.xlim(x_lim[0], x_lim[1])
+               if y_lim:
+                   plt.ylim(y_lim[0], y_lim[1])
            plt.plot(x,df_licks_group.iloc[-1], marker, label = "Mean_lick")
            plt.title("Original")
            plt.ylabel(y_label)
@@ -353,6 +367,11 @@ class Joystick_analyzer:
                    upper_band_sem = np.asfarray(yhat + yhat_error_sem)
                    lower_band_sem = np.asfarray(yhat - yhat_error_sem)
                    plt.fill_between(x, upper_band_sem , lower_band_sem, alpha = 0.4, color = "r")
+               if stat == "rate":
+                   if x_lim:
+                       plt.xlim(x_lim[0], x_lim[1])
+                   if y_lim:
+                       plt.ylim(y_lim[0], y_lim[1])
                plt.annotate("Max", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
                plt.plot(x,yhat, marker, label = "Mean")
@@ -366,7 +385,9 @@ class Joystick_analyzer:
                plt.show()
            else:
                plt.show()
-        
+       if stat == "rate":
+           df_licks_group["Mean"] = df_licks_group.mean(axis =1)
+           df_licks_group["Max"] = df_licks_group.iloc[:, 0: df_licks_group.shape[1] -1].max(axis=1)
        if msg == "yes":
             df_licks_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_lick" + ".xlsx")
     
@@ -706,7 +727,7 @@ class Joystick_analyzer:
                  plt.savefig(save_file_v2)
                  plt.show()
     
-    def veloctiy(self, pre_stim = 2, post_stim = 0, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, sem = True):
+    def veloctiy(self, pre_stim = 2, post_stim = 0, group = "all", marker= "r", smooth = True, window_length = 9, polyorder = 3, sem = True, x_lim = False, y_lim = False):
         global df_result_veloctiy, switcher, xd, xd1
         assert len(self.list_of_df) == len(self.list_of_files)
         
@@ -766,6 +787,10 @@ class Joystick_analyzer:
                     lower_band = np.asfarray(y - error_sem)
                     plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
                     iterator += 1
+                if x_lim:
+                    plt.xlim(x_lim[0], x_lim[1])
+                if y_lim:
+                    plt.ylim(y_lim[0], y_lim[1])
                 plt.title("Original")
                 plt.ylabel(y_label)
                 plt.xlabel("Time [s]")
@@ -786,6 +811,10 @@ class Joystick_analyzer:
                         upper_band_sem = np.asfarray(yhat + yhat_error_sem)
                         lower_band_sem = np.asfarray(yhat - yhat_error_sem)
                         plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+                    if x_lim:
+                        plt.xlim(x_lim[0], x_lim[1])
+                    if y_lim:
+                        plt.ylim(y_lim[0], y_lim[1])
                     plt.plot(x,yhat, marker, label = index)
                     plt.annotate("Max velocity", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                     plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, (max(yhat) + min(yhat))/2),arrowprops = dict(facecolor='green', shrink=0.1))
@@ -807,6 +836,10 @@ class Joystick_analyzer:
                 upper_band = np.asfarray(y + error_sem)
                 lower_band = np.asfarray(y - error_sem)
                 plt.fill_between(x, upper_band, lower_band, alpha = 0.4, color = "r")
+            if x_lim:
+                plt.xlim(x_lim[0], x_lim[1])
+            if y_lim:
+                plt.ylim(y_lim[0], y_lim[1])
             plt.title("Original")
             plt.ylabel(y_label)
             plt.xlabel("Time [s]")
@@ -824,6 +857,10 @@ class Joystick_analyzer:
                     upper_band_sem = np.asfarray(yhat + yhat_error_sem)
                     lower_band_sem = np.asfarray(yhat - yhat_error_sem)
                     plt.fill_between(x, upper_band_sem , lower_band_sem, alpha = 0.4, color = "r")
+                if x_lim:
+                    plt.xlim(x_lim[0], x_lim[1])
+                if y_lim:
+                    plt.ylim(y_lim[0], y_lim[1])
                 plt.annotate("Max velocity", xy = (x[np.where(yhat == max(yhat))[0]], max(yhat)), xytext=(-1.0, max(yhat)),arrowprops = dict(facecolor='blue', shrink=0.1))
                 plt.annotate("Reward start", xy = (0, min(yhat)), xytext=(0, max(yhat)/2),arrowprops = dict(facecolor='green', shrink=0.1))
                 plt.plot(x,yhat, marker, label = "Mean")
@@ -839,18 +876,19 @@ class Joystick_analyzer:
                 plt.show()
         
         df_velocity_group["Mean"] = df_velocity_group.mean(axis =1)
+        df_velocity_group["Max"] = df_velocity_group.iloc[:, 0: df_velocity_group.shape[1] -1].max(axis =1)
         df_result_veloctiy = df_velocity_group
         if msg == "yes":
              df_velocity_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_velocity" + ".xlsx")
 
 #object_joy = Joystick_analyzer()
-#object_joy.pre_proccesing(cut_to = 1700)
+#object_joy.pre_proccesing(cut_to = 100700)
 #object_joy.find_bugs(alfa = 0.36, automatic = False)
 
-#object_joy.veloctiy(group = "mean")
+#object_joy.veloctiy(group = "mean", y_lim = [0, 20])
 #object_joy.amplitude(event_markers = [1,3,2], x_axis = "mm", hue = "Event_Marker", group = None)
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
 #object_joy.amplitude_time(group = "mean", x_axis == "mm")
-#object_joy.lick_histogram(stat = "rate", group = "mean")
+#object_joy.lick_histogram(stat = "prob", group = "all", y_lim = [0 , 8])
