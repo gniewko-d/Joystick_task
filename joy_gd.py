@@ -86,7 +86,7 @@ class Joystick_analyzer:
            print(j.info())
         switcher = False
            
-    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True, y_stat = "count", x_axis = "units"):
+    def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True, y_stat = "count", x_axis = "units", x_lim = False, y_lim = False):
         global df, df_result_amplitude, switcher, xd1, xd
         amplitude_all =[]
         assert len(self.list_of_df) == len(self.list_of_files)
@@ -181,27 +181,40 @@ class Joystick_analyzer:
                     list_of_list.append(fake_data)
                 flatten_matrix = [val for sublist in list_of_list for val in sublist]
                 bin_amplitude = pd.Series(flatten_matrix, name = "Amplitude_Pos_mm")
-                xd = bin_amplitude
                 sns.histplot(data = bin_amplitude, bins = bins, stat = y_stat, fill = True, kde=True)
+                if x_lim:
+                    plt.xlim(x_lim[0], x_lim[1])
+                if y_lim:
+                    plt.ylim(y_lim[0], y_lim[1])
                 plt.legend(labels=[f"n = {len(self.list_of_df)}"])
         else:
             xd = df_amplitude
             if x_axis == "units":
                 sns.displot(df_amplitude, x = "Amplitude_Pos", hue = hue, col = group, kde = kde, color = "green", palette = "tab10", bins = bins, stat = y_stat)
+                if x_lim:
+                    plt.xlim(x_lim[0], x_lim[1])
+                if y_lim:
+                    plt.ylim(y_lim[0], y_lim[1])
             elif x_axis == "mm":
                 sns.displot(df_amplitude, x = "Amplitude_Pos_mm", hue = hue, col = group, kde = kde, color = "green", palette = "tab10", bins = bins, stat = y_stat)
+                if x_lim:
+                    plt.xlim(x_lim[0], x_lim[1])
+                if y_lim:
+                    plt.ylim(y_lim[0], y_lim[1])
         if x_axis == "units":
             null_sum = df_amplitude["Amplitude_Pos"].isnull().sum()
         elif x_axis == "mm":
             null_sum = df_amplitude["Amplitude_Pos_mm"].isnull().sum()
         main = tk.Tk()
         msg = tk.messagebox.askquestion ('Save window','Do you want to save graphs and data?',icon = 'warning')
+        bin_amplitude = bin_amplitude.value_counts().to_frame()
         if msg == "yes":
             main.destroy()
             save_file_v1 = easygui.diropenbox(msg = "Select folder for a save location", title = "Typical window")
             if group == None:
                 save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + "_amplitude_mean" + ".svg"
                 bin_amplitude.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_amplitude_mean" + ".xlsx")
+                
             else:
                 save_file_v2 = save_file_v1 + "//" + self.list_of_files[0] + "__" + self.list_of_files[-1] + "_amplitude_each_group" + ".svg"
             plt.savefig(save_file_v2)
@@ -886,7 +899,7 @@ class Joystick_analyzer:
 #object_joy.find_bugs(alfa = 0.36, automatic = False)
 
 #object_joy.veloctiy(group = "mean", y_lim = [0, 20])
-#object_joy.amplitude(event_markers = [1,3,2], x_axis = "mm", hue = "Event_Marker", group = None)
+#object_joy.amplitude(event_markers = [1,3,2], x_axis = "mm", hue = "Event_Marker", group = None, x_lim = [0 , 30])
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
 #object_joy.prob_reward()
