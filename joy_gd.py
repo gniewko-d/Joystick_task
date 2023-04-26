@@ -54,13 +54,13 @@ class Joystick_analyzer:
            df.columns = self.column_name
            max_row = df["Time_in_sec"].tolist()
            max_row = [round(i) for i in max_row]
-           answer = max_row.index(1801 + max_row[0])
-           j = j.drop(j.index[answer-4:])
+           #answer = max_row.index(1801 + max_row[0])
+           #j = j.drop(j.index[answer-4:])
            trial_max = j["TrialCt"].max()
            bugged_index = [j.loc[j["TrialCt"] == l, "Event_Marker"].lt(0).idxmax() for l in range(1, trial_max + 1)]
            j.iloc[bugged_index, 5] = 0
            df.columns = self.column_name
-           df = df.drop(df.index[answer-4:])
+           #df = df.drop(df.index[answer-4:])
            df["Amplitude_Pos_mm"] = j["Amplitude_Pos"].apply(lambda x: x/ u_to_mm)
            
            delta_dist = df["Amplitude_Pos_mm"].tolist()
@@ -895,7 +895,7 @@ class Joystick_analyzer:
              df_velocity_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_velocity" + ".xlsx")
 
 #object_joy = Joystick_analyzer()
-#object_joy.pre_proccesing(cut_to = 100700)
+#object_joy.pre_proccesing(cut_to = 10000)
 #object_joy.find_bugs(alfa = 0.36, automatic = False)
 
 #object_joy.veloctiy(group = "mean", y_lim = [0, 20])
