@@ -10,7 +10,6 @@ import pandas as pd
 import numpy as np
 from itertools import chain
 from termcolor import colored
-import math 
 import progressbar
 import tkinter as tk
 import seaborn as sns;# sns.set_theme()
@@ -969,7 +968,7 @@ class Joystick_analyzer:
                 theta_list = []
                 for max_index in zip(movment_list_x_max, movment_list_y_max):
                     ans= self.cart2pol(max_index[0], max_index[1])
-                    r_list.append(ans[0])
+                    r_list.append(ans[0] / u_to_mm)
                     theta_list.append(ans[1])
                 width = np.pi/15
                 ax = plt.subplot(111, projection='polar')
@@ -1382,4 +1381,4 @@ object_joy.find_bugs(alfa = 0.05, automatic = False)
 #object_joy.prob_reward()
 #object_joy.amplitude_time(group = "mean", x_axis == "mm")
 #object_joy.lick_histogram(stat = "rate", group = "mean", y_lim = [0 , 20], sem = True)
-object_joy.trajectory(move_range = "start_move_to_max", calibrate= False, polar = True)
+object_joy.trajectory(move_range = "start_move_to_max", calibrate= True, polar = True)
