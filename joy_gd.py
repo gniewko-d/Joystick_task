@@ -51,7 +51,7 @@ class Joystick_analyzer:
             self.list_of_df = []
             self.group = ["SAL", "CNO"]
         else:
-            self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks", "Type_move"]
+            self.column_name = ["Time_in_sec", "Event_Marker", "TrialCt", "JoyPos_X", "JoyPos_Y", "Amplitude_Pos", "Base_JoyPos_X", "Base_JoyPos_Y", "SolOpenDuration", "DelayToRew", "ITI", "Threshold", "Fail_attempts", "Sum_of_fail_attempts", "Lick_state", "Sum_licks"]
             self.list_of_files = easygui.fileopenbox(title="Select a file", filetypes= "*.csv",  multiple=True)
             self.gen_df = (pd.read_csv(i, header=None) for i in self.list_of_files)
             self.list_of_files = [i.split("\\")[-1] for i in  self.list_of_files]
@@ -64,6 +64,9 @@ class Joystick_analyzer:
         self.new_max_v2 = []
         self.trials_conteiner = []
         for i,j in enumerate(self.gen_df):
+           if not self.opto:
+               if j.shape[1] == 17:
+                   j = j.iloc[:, :-1]
            j[0]= j[0].apply(lambda x : round((x/1000),2))
            j.columns = self.column_name
            df = j
