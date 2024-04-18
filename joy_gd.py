@@ -59,15 +59,17 @@ class Joystick_analyzer:
             self.list_of_df = []
             self.group = ["SAL", "CNO"]
     
-    def pre_proccesing(self, cut_to = False):
+    def pre_proccesing(self, cut_to = False, cut_first = False):
         global df, switcher
         self.new_max_v2 = []
         self.trials_conteiner = []
         for i,j in enumerate(self.gen_df):
+           
            if not self.opto:
                if j.shape[1] == 17:
                    j = j.iloc[:, :-1]
-           j[0]= j[0].apply(lambda x : round((x/1000),2))
+           
+           j.iloc[:, 0] = j.iloc[:, 0].apply(lambda x : round((x / 1000),2)) # Convert time to seconds
            j.columns = self.column_name
            df = j
            df.columns = self.column_name
@@ -75,8 +77,10 @@ class Joystick_analyzer:
            max_row = [round(i) for i in max_row]
            #answer = max_row.index(1801 + max_row[0])
            #j = j.drop(j.index[answer-4:])
+        
            trial_max = j["TrialCt"].max()
            bugged_index = [j.loc[j["TrialCt"] == l, "Event_Marker"].lt(0).idxmax() for l in range(1, trial_max + 1)]
+           
            j.iloc[bugged_index, 5] = 0
            df.columns = self.column_name
            df["Amplitude_Pos_mm"] = j["Amplitude_Pos"].apply(lambda x: x / u_to_mm)
@@ -90,7 +94,7 @@ class Joystick_analyzer:
            j["delta_Amplitude_Pos_mm"] = delta_dist
            
            time_list = df["Time_in_sec"].tolist()
-           current_velocity = [ round((delta_dist[ii] / (time_list[ii] - time_list[ii-1]))/10 ,2) for ii in range(1, len(time_list))]
+           current_velocity = [ round(((delta_dist[ii] / 10) / (time_list[ii] - time_list[ii-1])) ,2) for ii in range(1, len(time_list))]
            current_velocity.insert(0, 0)
            df["Current_velocity_cm_s"] = current_velocity
            j["Current_velocity_cm_s"] = current_velocity
@@ -112,6 +116,15 @@ class Joystick_analyzer:
                self.new_max_v2.append(j_stim_index_len)
                self.new_max_v2.append(j_index_len)
            self.list_of_df.append(j)
+           if cut_first:
+               first_trl = j["TrialCt"][0]
+               last_index = j.loc[j["TrialCt"] == first_trl].last_valid_index()
+               drop_list = list(range(0, last_index + 1))
+               j.drop(drop_list, inplace = True)
+               j.reset_index(inplace = True, drop = True)
+           print(j["Current_velocity_cm_s"])
+            
+
         switcher = False
     
     def amplitude(self, event_markers = [0,1,2,3,4], hue = None, kde = False, group = "Mouse_ID", fill_nan = True, y_stat = "count", x_axis = "units", x_lim = False, y_lim = False):
@@ -675,6 +688,7 @@ class Joystick_analyzer:
             base_x_lower = base_joypos_X - base_joypos_X * alfa
             base_y_lower = base_joypos_Y - base_joypos_Y * alfa
         for l,i in enumerate(self.list_of_df):
+            first_trl = i["TrialCt"][0]
             print(f"len before: {len(i)}")
             if automatic:
                 base_x_upper = i.loc[0, "Base_JoyPos_X"] + i.loc[0, "Base_JoyPos_X"] * alfa
@@ -686,15 +700,15 @@ class Joystick_analyzer:
                     ans_y = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_Y"]).pop() for ii in self.trials_conteiner[l]]
             else:
                 trial_max = i["TrialCt"].max()
-                ans_x = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_X"]).pop() for ii in range(1,trial_max + 1)]
-                ans_y = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_Y"]).pop() for ii in range(1,trial_max + 1)]
+                ans_x = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_X"]).pop() for ii in range(first_trl,trial_max + 1)]
+                ans_y = [set(i.loc[i["TrialCt"] == ii, "Base_JoyPos_Y"]).pop() for ii in range(first_trl,trial_max + 1)]
             x_bool = [True if base_x_lower < jj < base_x_upper else False for jj in ans_x]
             y_bool = [True if base_y_lower < kk < base_y_upper else False for kk in ans_y]
             x_y_bool = ["ok" if x == True and y == True else "not ok" if x == True or y == True else "very bad" for x, y in zip(x_bool, y_bool)]
             if self.opto:
                 df_result = pd.DataFrame({"x_bool": x_bool, "y_bool": y_bool, "x_y_bool": x_y_bool}, index = [i for i in self.trials_conteiner[l]])
             else:
-                df_result = pd.DataFrame({"x_bool": x_bool, "y_bool": y_bool, "x_y_bool": x_y_bool}, index = range(1,trial_max +1))
+                df_result = pd.DataFrame({"x_bool": x_bool, "y_bool": y_bool, "x_y_bool": x_y_bool}, index = range(first_trl,trial_max +1))
             print("Mice ID: ", self.list_of_files[l],"\n", df_result["x_y_bool"].value_counts(), "\n" ,round(df_result["x_y_bool"].value_counts(normalize=True),2))
             print(" ")
             trial_max = i["TrialCt"].max()
@@ -823,7 +837,7 @@ class Joystick_analyzer:
         print("")
         print("veloctiy \n function parameters:\n pre_stim - how much time in sec you want to include in graph, up to reward onset [value: (int)] \n post_stim - how much time in sec you want to include in graph, after reward onset [value: (int)] \n group - graphs will be created for each mice separately or together [value: all, mean (string)]\n marker - color and type of line on graph [value: (string)]\n smooth - smoothing algorithm that go through data [value: True (bool), False (bool)]\n window_length - (only if smooth = True) how long will be the polynomial that will be fitted to data [value: (int)]\n polyorder - (only if smooth = True) the degree of a polynomial that will be fitted to data [value: (int)]\n sem - standard error of mean will be added to graph [value: True (bool), False (bool)]")
     
-    def trajectory(self, move_range = "0_to_max", calibrate = False, x_lim = False, y_lim = False, polar = False, starting_point = True):
+    def trajectory(self, move_range = "0_to_max", calibrate = False, x_lim = False, y_lim = False, polar = False, starting_point = True, y_lim_polar = False):
         global xd1
         df_trajectory = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "x_coordinate_start_move_to_max", "y_coordinate_start_move_to_max", "time_start [sec]", "time_end [sec]", "move_duration [sec]", "time_trial_start [sec]", "move_duration_from_trial_start [sec]" ])
         df_polar = pd.DataFrame(columns= ["TrialCt", "Mouse_ID", "Radial coordinate", "Polar angle"])
@@ -846,7 +860,7 @@ class Joystick_analyzer:
                 start_index = [i.loc[i["TrialCt"] == hh].first_valid_index() for hh in trial_list if i.loc[(i["TrialCt"] == hh) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
                 movment_end = [i.loc[(i["TrialCt"] == ii) & (i["Event_Marker"] == 1), "Amplitude_Pos"].idxmax() for ii in trial_list if i.loc[(i["TrialCt"] == ii) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
                 trial_list_v2 = [trial for trial in trial_list if i.loc[(i["TrialCt"] == trial) & (i["Event_Marker"] == 1), "Amplitude_Pos"].tolist()]
-            
+                
             movment_list_x_start_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 3].tolist() for range_index_1 in zip(start_index, movment_end)]
             movment_list_y_start_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 4].tolist() for range_index_1 in zip(start_index, movment_end)]
             
@@ -864,8 +878,6 @@ class Joystick_analyzer:
                         if i.iloc[current_index, 5] < 10 and i.iloc[current_index, 1] == 0:
                             list_supporter.append(current_index)
                             break
-
-
             movment_list_x_0_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 3].tolist() for range_index_1 in zip(list_supporter, movment_end)]
             movment_list_y_0_to_max = [i.iloc[range_index_1[0]: range_index_1[1]+1, 4].tolist() for range_index_1 in zip(list_supporter, movment_end)]
             time_of_movement_start = [i.iloc[range_index_1, 0].tolist() for range_index_1 in list_supporter]
@@ -875,6 +887,7 @@ class Joystick_analyzer:
             movement_duration_from_trial = [[range_index_1[1] - range_index_1[0]][0] for range_index_1 in zip(trial_time_start, time_of_movement_stop)]
             movment_list_x_0_to_max_backup = movment_list_x_0_to_max
             movment_list_y_0_to_max_backup = movment_list_y_0_to_max
+            
             
             
             if calibrate:
@@ -974,9 +987,11 @@ class Joystick_analyzer:
                     r_list.append(ans[0] / u_to_mm)
                     theta_list.append(ans[1])
                 width = np.pi/15
+                
                 ax = plt.subplot(111, projection='polar')
                 ax.set_title(self.list_of_files[l] + "_start_move_to_max")
-                
+                if y_lim_polar:
+                    ax.set_ylim(y_lim_polar)
                 bars = ax.bar( theta_list , r_list, width=width, bottom=0.0)
                 for r, bar in zip(r_list, bars):
                     bar.set_alpha(0.3)
@@ -1375,7 +1390,7 @@ class Joystick_analyzer:
              df_velocity_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_velocity" + ".xlsx")
 
 object_joy = Joystick_analyzer(opto= False)
-object_joy.pre_proccesing(cut_to = 10000)
+object_joy.pre_proccesing(cut_to = 10000, cut_first=True)
 object_joy.find_bugs(alfa = 0.05, automatic = False)
 #object_joy.veloctiy(group = "all", y_lim = [0, 10])
 #object_joy.amplitude(hue = "Event_Marker", event_markers = [0,1,2,3,4], x_lim= [0,25], x_axis = "mm") 
@@ -1384,4 +1399,4 @@ object_joy.find_bugs(alfa = 0.05, automatic = False)
 #object_joy.prob_reward()
 #object_joy.amplitude_time(group = "mean", x_axis == "mm")
 #object_joy.lick_histogram(stat = "rate", group = "mean", y_lim = [0 , 20], sem = True)
-object_joy.trajectory(move_range = "start_move_to_max", calibrate= True, polar = True)
+object_joy.trajectory(move_range = "start_move_to_max", calibrate= True, polar = True, y_lim_polar=[0,20])
