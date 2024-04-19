@@ -122,7 +122,7 @@ class Joystick_analyzer:
                drop_list = list(range(0, last_index + 1))
                j.drop(drop_list, inplace = True)
                j.reset_index(inplace = True, drop = True)
-           print(j["Current_velocity_cm_s"])
+           
             
 
         switcher = False
@@ -1160,6 +1160,8 @@ class Joystick_analyzer:
                  trial_max = i["TrialCt"].max()
              print(" ")
              list_value = [i.iloc[j-start:j+stop + 1, velocity_index].tolist() for j in index_events]
+             v_2 = [i.iloc[j-start:j+stop + 1, velocity_index].index for j in index_events]
+             print(v_2)
              df_velocity = pd.DataFrame(list_value,columns= [str(round(k,2)) for k in columns])
              
              if sem:
@@ -1390,9 +1392,9 @@ class Joystick_analyzer:
              df_velocity_group.to_excel(save_file_v1 + "//" + self.list_of_files[0] + "_" + self.list_of_files[-1] + "_velocity" + ".xlsx")
 
 object_joy = Joystick_analyzer(opto= False)
-object_joy.pre_proccesing(cut_to = 10000, cut_first=True)
+object_joy.pre_proccesing(cut_to = 100, cut_first=True)
 object_joy.find_bugs(alfa = 0.05, automatic = False)
-#object_joy.veloctiy(group = "all", y_lim = [0, 10])
+object_joy.veloctiy(group = "all", y_lim = [0, 10], post_stim= 2)
 #object_joy.amplitude(hue = "Event_Marker", event_markers = [0,1,2,3,4], x_lim= [0,25], x_axis = "mm") 
 #object_joy.move_type(event_markers = [0,1,3,4], hue = "Event_Marker", group = "all")
 #object_joy.help_me()
